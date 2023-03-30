@@ -1,0 +1,16 @@
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libbpf-rs = "0.20"
+anyhow = "1.0"
+powercap = "0.3"
+cursive = "0.20"
+
+[build-dependencies]
+libbpf-cargo = "0.20"
+bindgen = "0.64"
