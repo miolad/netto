@@ -4,7 +4,8 @@
 #[derive(Debug, Copy, Clone)]
 pub struct per_cpu_data {
     pub prev_ts: u64,
-    pub total_time: u64,
+    pub total_syscall: u64,
+    pub total_softirq: u64,
 }
 #[test]
 fn bindgen_test_layout_per_cpu_data() {
@@ -12,7 +13,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        16usize,
+        24usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(
@@ -31,13 +32,23 @@ fn bindgen_test_layout_per_cpu_data() {
         )
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).total_time) as usize - ptr as usize },
+        unsafe { ::std::ptr::addr_of!((*ptr).total_syscall) as usize - ptr as usize },
         8usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),
             "::",
-            stringify!(total_time)
+            stringify!(total_syscall)
+        )
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).total_softirq) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_cpu_data),
+            "::",
+            stringify!(total_softirq)
         )
     );
 }

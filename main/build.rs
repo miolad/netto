@@ -22,4 +22,5 @@ fn main() {
 
     println!("cargo:rerun-if-changed={SRC}");
     println!("cargo:rerun-if-changed={SRC_H}");
+    println!("cargo:rerun-if-changed=src/bpf/event_stack.bpf.h");
 }

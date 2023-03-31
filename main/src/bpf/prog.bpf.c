@@ -2,6 +2,7 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include "prog.bpf.h"
+#include "event_stack.bpf.h"
 
 #ifndef likely
 #define likely(x) __builtin_expect((x), 1)
@@ -11,11 +12,6 @@
 #endif
 
 char LICENSE[] SEC("license") = "GPL";
-
-enum {
-    EVENT_SOCK_SENDMSG   = (1 << 0),
-    EVENT_NET_RX_SOFTIRQ = (1 << 1)
-};
 
 struct {
     __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
@@ -52,14 +48,18 @@ int BPF_PROG(send_msg_entry) {
     struct per_cpu_data* timestamps;
     uint64_t* events;
     struct task_struct* task = bpf_get_current_task_btf();
+    uint64_t now = bpf_ktime_get_ns();
     
     if (
         likely(depth = bpf_task_storage_get(&traced_pids_sock_send, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) &&
         likely((int64_t)__sync_fetch_and_add(depth, 1) == 0)                                                     &&
         likely(timestamps = bpf_map_lookup_elem(&per_cpu, &zero))                                                &&
-        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE))   &&
-        (uint64_t)__sync_fetch_and_or(events, EVENT_SOCK_SENDMSG) == 0
+        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE))
     ) {
+        if ((uint64_t)__sync_fetch_and_or(events, EVENT_SOCK_SENDMSG) == EVENT_NET_RX_SOFTIRQ) {
+            __sync_fetch_and_add(&timestamps->total_softirq, now - timestamps->prev_ts);
+        }
+        
         timestamps->prev_ts = bpf_ktime_get_ns();
     }
 
@@ -73,15 +73,19 @@ int BPF_PROG(send_msg_exit) {
     struct per_cpu_data* timestamps;
     uint64_t* events;
     struct task_struct* task = bpf_get_current_task_btf();
+    uint64_t now = bpf_ktime_get_ns();
 
     if (
         likely(depth = bpf_task_storage_get(&traced_pids_sock_send, task, NULL, 0)) &&
         likely((int64_t)__sync_sub_and_fetch(depth, 1) == 0)                        &&
         likely(timestamps = bpf_map_lookup_elem(&per_cpu, &zero))                   &&
-        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, 0))   &&
-        (uint64_t)__sync_and_and_fetch(events, ~EVENT_SOCK_SENDMSG) == 0
+        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, 0))
     ) {
-        __sync_fetch_and_add(&timestamps->total_time, bpf_ktime_get_ns() - timestamps->prev_ts);
+        __sync_fetch_and_add(&timestamps->total_syscall, now - timestamps->prev_ts);
+        
+        if ((uint64_t)__sync_and_and_fetch(events, ~EVENT_SOCK_SENDMSG) == EVENT_NET_RX_SOFTIRQ) {
+            timestamps->prev_ts = now;
+        }
     }
 
     return 0;
@@ -94,16 +98,20 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
     struct per_cpu_data* timestamps;
     uint64_t* events;
     struct task_struct* task = bpf_get_current_task_btf();
+    uint64_t now = bpf_ktime_get_ns();
 
     if (
         vec == NET_RX_SOFTIRQ                                                                                         &&
         likely(depth = bpf_task_storage_get(&traced_pids_net_rx_softirq, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) &&
         (int64_t)__sync_fetch_and_add(depth, 1) == 0                                                                  &&
         likely(timestamps = bpf_map_lookup_elem(&per_cpu, &zero))                                                     &&
-        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE))        &&
-        (uint64_t)__sync_fetch_and_or(events, EVENT_NET_RX_SOFTIRQ) == 0
+        likely(events = bpf_task_storage_get(&traced_pids_events, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE))
     ) {
-        timestamps->prev_ts = bpf_ktime_get_ns();
+        if ((uint64_t)__sync_fetch_and_or(events, EVENT_NET_RX_SOFTIRQ) == EVENT_SOCK_SENDMSG) {
+            __sync_fetch_and_add(&timestamps->total_syscall, now - timestamps->prev_ts);
+        }
+
+        timestamps->prev_ts = now;
     }
 
     return 0;
@@ -115,16 +123,20 @@ int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
     int64_t* depth;
     struct per_cpu_data* timestamps;
     uint64_t* events;
+    uint64_t now = bpf_ktime_get_ns();
 
     if (
         vec == NET_RX_SOFTIRQ                                                                                  &&
         likely(depth = bpf_task_storage_get(&traced_pids_net_rx_softirq, bpf_get_current_task_btf(), NULL, 0)) &&
         (int64_t)__sync_sub_and_fetch(depth, 1) == 0                                                           &&
         likely(timestamps = bpf_map_lookup_elem(&per_cpu, &zero))                                              &&
-        likely(events = bpf_task_storage_get(&traced_pids_events, bpf_get_current_task_btf(), NULL, 0))        &&
-        (uint64_t)__sync_and_and_fetch(events, ~EVENT_NET_RX_SOFTIRQ) == 0
+        likely(events = bpf_task_storage_get(&traced_pids_events, bpf_get_current_task_btf(), NULL, 0))
     ) {
-        __sync_fetch_and_add(&timestamps->total_time, bpf_ktime_get_ns() - timestamps->prev_ts);
+        __sync_fetch_and_add(&timestamps->total_softirq, now - timestamps->prev_ts);
+
+        if ((uint64_t)__sync_and_and_fetch(events, ~EVENT_NET_RX_SOFTIRQ) == EVENT_SOCK_SENDMSG) {
+            timestamps->prev_ts = now;
+        }
     }
 
     return 0;
