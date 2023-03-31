@@ -2,10 +2,50 @@
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct per_cpu_data {
+pub struct per_event_data {
     pub prev_ts: u64,
-    pub total_syscall: u64,
-    pub total_softirq: u64,
+    pub total_time: u64,
+}
+#[test]
+fn bindgen_test_layout_per_event_data() {
+    const UNINIT: ::std::mem::MaybeUninit<per_event_data> = ::std::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::std::mem::size_of::<per_event_data>(),
+        16usize,
+        concat!("Size of: ", stringify!(per_event_data))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<per_event_data>(),
+        8usize,
+        concat!("Alignment of ", stringify!(per_event_data))
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).prev_ts) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_event_data),
+            "::",
+            stringify!(prev_ts)
+        )
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).total_time) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_event_data),
+            "::",
+            stringify!(total_time)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct per_cpu_data {
+    #[doc = " @brief One for each possible event"]
+    pub events: [per_event_data; 6usize],
 }
 #[test]
 fn bindgen_test_layout_per_cpu_data() {
@@ -13,7 +53,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        24usize,
+        96usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(
@@ -22,33 +62,13 @@ fn bindgen_test_layout_per_cpu_data() {
         concat!("Alignment of ", stringify!(per_cpu_data))
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).prev_ts) as usize - ptr as usize },
+        unsafe { ::std::ptr::addr_of!((*ptr).events) as usize - ptr as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),
             "::",
-            stringify!(prev_ts)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).total_syscall) as usize - ptr as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(per_cpu_data),
-            "::",
-            stringify!(total_syscall)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).total_softirq) as usize - ptr as usize },
-        16usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(per_cpu_data),
-            "::",
-            stringify!(total_softirq)
+            stringify!(events)
         )
     );
 }

@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
         .intel_rapl;
 
     let num_possible_cpus = num_possible_cpus()?;
-    let mut prev_total_time = vec![0u64; num_possible_cpus];
+    let mut prev_total_times = vec![vec![0u64; 6]; num_possible_cpus];
     let mut prev_instant = Instant::now();
 
     let mut prev_total_energy = 0;
@@ -55,26 +55,86 @@ fn main() -> anyhow::Result<()> {
         prev_total_energy = current_total_energy;
 
         if let Some(stats) = per_cpu_map.lookup_percpu(&0i32.to_le_bytes(), MapFlags::empty())? {
-            let cumulative_cpu_fraction = stats
+            stats
                 .iter()
-                .zip(prev_total_time.iter_mut())
+                .zip(prev_total_times.iter_mut())
                 .enumerate()
-                .map(|(cpuid, (cpu_stats, prev_total_cpu_time))| {
-                    let total_cpu_time = unsafe {
-                        &*(cpu_stats.as_ptr() as *const common::per_cpu_data)
-                    }.total_time;
-                    let delta_cpu_time = total_cpu_time - *prev_total_cpu_time;
-                    *prev_total_cpu_time = total_cpu_time;
+                .map(|(cpuid, (cpu_stats, prev_total_cpu_times))| {
+                    let mut total_cpu_frac = 0.0;
                     
-                    let cpu_fraction = (delta_cpu_time as f64) / (delta_time.as_nanos() as f64);
-                    let _ = tui.set_val(cpuid, "total", cpu_fraction);
+                    let mut cpu_times = unsafe {
+                        &*(cpu_stats.as_ptr() as *const common::per_cpu_data)
+                    }.events
+                        .iter()
+                        .zip(prev_total_cpu_times.iter_mut())
+                        .enumerate()
+                        .map(|(event_idx, (common::per_event_data { total_time, .. }, prev_total_time))| {
+                            let delta_cpu_time = total_time - *prev_total_time;
+                            *prev_total_time = *total_time;
+                            let cpu_frac = (delta_cpu_time as f64) / (delta_time.as_nanos() as f64);
 
-                    cpu_fraction
+                            let metric_name = match event_idx {
+                                0 /* EVENT_SOCK_SENDMSG   */ => {
+                                    total_cpu_frac += cpu_frac;
+                                    "tx_syscalls"
+                                },
+                                1 /* EVENT_NET_RX_SOFTIRQ */ => {
+                                    total_cpu_frac += cpu_frac;
+                                    "rx_softirq"
+                                },
+                                2 /* EVENT_CONSUME_SKB    */ => "",
+                                3 /* EVENT_BRDIGE         */ => "bridging",
+                                4 /* EVENT_FORWARD        */ => "forwarding",
+                                5 /* EVENT_LOCAL_DELIVER  */ => "",
+
+                                _ => unreachable!()
+                            };
+
+                            let _ = tui.set_val(cpuid, metric_name, cpu_frac);
+
+                            cpu_frac
+                        })
+                        .collect::<Vec<_>>();
+
+                    cpu_times.push(total_cpu_frac);
+                    let _ = tui.set_val(cpuid, "total", total_cpu_frac);
+
+                    cpu_times
                 })
-                .sum::<f64>() / (num_possible_cpus as f64);
+                .reduce(|mut acc, e| {
+                    acc
+                        .iter_mut()
+                        .zip(e.iter())
+                        .for_each(|(acc, e)| {
+                            *acc += *e;
+                        });
 
-            let _ = tui.set_val(num_possible_cpus, "total", cumulative_cpu_fraction);
-            tui.set_total_power(((delta_energy as f64) * cumulative_cpu_fraction) / (delta_time.as_secs_f64() * 1_000_000.0));
+                    acc
+                })
+                .unwrap()
+                .iter()
+                .enumerate()
+                .for_each(|(event_idx, e)| {
+                    let cpu_frac = e / (num_possible_cpus as f64);
+                    
+                    let metric_name = match event_idx {
+                        0 /* EVENT_SOCK_SENDMSG   */ => "tx_syscalls",
+                        1 /* EVENT_NET_RX_SOFTIRQ */ => "rx_softirq",
+                        2 /* EVENT_CONSUME_SKB    */ => "",
+                        3 /* EVENT_BRDIGE         */ => "bridging",
+                        4 /* EVENT_FORWARD        */ => "forwarding",
+                        5 /* EVENT_LOCAL_DELIVER  */ => "",
+
+                        6 /* TOTAL */                => {
+                            tui.set_total_power(((delta_energy as f64) * cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0));
+                            "total"
+                        },
+
+                        _ => unreachable!()
+                    };
+
+                    let _ = tui.set_val(num_possible_cpus, metric_name, cpu_frac);
+                });
         }
         
         tui_runner.refresh();
