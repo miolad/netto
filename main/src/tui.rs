@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use cursive::{CursiveRunnable, views::{TextContent, LinearLayout, TextView, DummyView, PaddedView}, theme::Color, view::Resizable};
+use cursive::{CursiveRunnable, views::{TextContent, LinearLayout, TextView, DummyView, PaddedView}, theme::Color, view::Resizable, event::{Event, Key}};
 
 /// Manager for the Terminal User Interface for displaying performance data
 pub struct Tui {
@@ -24,6 +24,7 @@ impl Tui {
 
         // Set a global callback to exit the application
         siv.set_global_callback('q', |c| c.quit());
+        siv.set_global_callback(Event::Key(Key::Esc), |c| c.quit());
 
         let mut text_contents = Vec::with_capacity(num_cpus + 1);
         let black = Color::Rgb(0, 0, 0);
@@ -36,8 +37,10 @@ impl Tui {
             .child(DummyView)
             .child(TextView::new("TX syscalls").style(black))
             .child(TextView::new("RX softirq").style(black))
+            .child(TextView::new(" \u{251c} consume skb").style(black))
             .child(TextView::new(" \u{251c} bridging").style(black))
-            .child(TextView::new(" \u{2514} forwarding").style(black))
+            .child(TextView::new(" \u{251c} forwarding").style(black))
+            .child(TextView::new(" \u{2514} local deliver").style(black))
             .child(DummyView)
             .child(TextView::new("TOTAL").style(black));
 
@@ -89,8 +92,10 @@ impl Tui {
         let text_contents = HashMap::from([
             ("tx_syscalls", TextContent::new("N/A")),
             ("rx_softirq", TextContent::new("N/A")),
+            ("consume_skb", TextContent::new("N/A")),
             ("bridging", TextContent::new("N/A")),
             ("forwarding", TextContent::new("N/A")),
+            ("local_deliver", TextContent::new("N/A")),
             ("total", TextContent::new("N/A"))
         ]);
         
@@ -107,8 +112,10 @@ impl Tui {
             .child(DummyView)
             .child(TextView::new_with_content(text_contents["tx_syscalls"].clone()).center())
             .child(TextView::new_with_content(text_contents["rx_softirq"].clone()).center())
+            .child(TextView::new_with_content(text_contents["consume_skb"].clone()).center())
             .child(TextView::new_with_content(text_contents["bridging"].clone()).center())
             .child(TextView::new_with_content(text_contents["forwarding"].clone()).center())
+            .child(TextView::new_with_content(text_contents["local_deliver"].clone()).center())
             .child(DummyView)
             .child(TextView::new_with_content(text_contents["total"].clone()).center());
 

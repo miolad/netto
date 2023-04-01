@@ -10,12 +10,15 @@
 #define EVENT_STACK_SIZE 4
 
 enum {
-    EVENT_SOCK_SENDMSG   = 0,
-    EVENT_NET_RX_SOFTIRQ = 1,
-    EVENT_CONSUME_SKB    = 2,
-    EVENT_BRIDGE         = 3,
-    EVENT_FORWARD        = 4,
-    EVENT_LOCAL_DELIVER  = 5
+    EVENT_SOCK_SENDMSG      = 0,
+    EVENT_NET_RX_SOFTIRQ    = 1,
+    EVENT_CONSUME_SKB       = 2,
+    EVENT_BRIDGE            = 3,
+    EVENT_FORWARD           = 4,
+    EVENT_LOCAL_DELIVER     = 5,
+
+    /// @brief Fictious event used to handle preemption/task switches
+    EVENT_DUMMY_TASK_SWITCH = 6,
 };
 
 /**
@@ -24,12 +27,14 @@ enum {
  * meaning that it can only happen while in softirq context.
  */
 uint32_t events[] = {
-    (1 << EVENT_SOCK_SENDMSG)                                /** SOCK_SENDMSG   */,
-    (1 << EVENT_NET_RX_SOFTIRQ)                              /** NET_RX_SOFTIRQ */,
-    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_CONSUME_SKB)   /** CONSUME_SKB    */,
-    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_BRIDGE)        /** BRIDGE         */,
-    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_FORWARD)       /** FORWARD        */,
-    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_LOCAL_DELIVER) /** LOCAL_DELIVER  */
+    (1 << EVENT_SOCK_SENDMSG)                                /** SOCK_SENDMSG      */,
+    (1 << EVENT_NET_RX_SOFTIRQ)                              /** NET_RX_SOFTIRQ    */,
+    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_CONSUME_SKB)   /** CONSUME_SKB       */,
+    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_BRIDGE)        /** BRIDGE            */,
+    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_FORWARD)       /** FORWARD           */,
+    (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_LOCAL_DELIVER) /** LOCAL_DELIVER     */,
+
+    0                                                        /** DUMMY_TASK_SWITCH */
 };
 
 /** Checks if child is a sub-event of parent */
@@ -89,7 +94,7 @@ static inline uint32_t event_stack_pop(struct event_stack* stack, uint32_t event
     uint32_t cur_event_idx;
     uint32_t cur_event, prev_event = 0xFFFFFFFF, event = events[event_idx];
 
-    if (likely(stack->stack_ptr > 0) && likely(stack->stack_ptr < EVENT_STACK_SIZE)) {
+    if (likely(stack->stack_ptr > 0) && likely(stack->stack_ptr <= EVENT_STACK_SIZE)) {
         for (i = 0; (i < stack->stack_ptr - 1) && (i < EVENT_STACK_SIZE); ++i) { // Convoluted loop makes the verifier happy
             uint32_t j = stack->stack_ptr - i - 2;
             if (likely(j < EVENT_STACK_SIZE)) { // Useless check makes the verifier happy
@@ -107,7 +112,7 @@ static inline uint32_t event_stack_pop(struct event_stack* stack, uint32_t event
             }
         }
         
-        return stack->stack[--stack->stack_ptr];
+        return stack->stack[--(stack->stack_ptr)];
     }
 
     return 0xFFFFFFFF;

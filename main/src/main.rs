@@ -18,10 +18,17 @@ fn main() -> anyhow::Result<()> {
     let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
     let _sock_send_exit_link = skel.progs_mut().send_msg_exit().attach()?;
     let _net_rx_softirq_exit_link = skel.progs_mut().net_rx_softirq_exit().attach()?;
-    let _sock_send_entry_link = skel.progs_mut().send_msg_entry().attach()?;
-    let _net_rx_softirq_entry = skel.progs_mut().net_rx_softirq_entry().attach()?;
+    let _napi_consume_skb_exit = skel.progs_mut().napi_consume_skb_exit().attach()?;
+    let _napi_consume_skb_entry = skel.progs_mut().napi_consume_skb_entry().attach()?;
+    let _ip_forward_exit = skel.progs_mut().ip_forward_exit().attach()?;
+    let _ip_forward_entry = skel.progs_mut().ip_forward_entry().attach()?;
+    let _br_handle_frame_exit = skel.progs_mut().br_handle_frame_exit().attach()?;
+    let _br_handle_frame_entry = skel.progs_mut().br_handle_frame_entry().attach()?;
+    let _ip_local_deliver_exit = skel.progs_mut().ip_local_deliver_exit().attach()?;
+    let _ip_local_deliver_entry = skel.progs_mut().ip_local_deliver_entry().attach()?;
 
-    // let _br_handle_frame_entry = skel.progs_mut().br_handle_frame_entry().attach()?;
+    let _sock_send_entry_link = skel.progs_mut().send_msg_entry().attach()?;
+    let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
 
     let maps = skel.maps();
     let per_cpu_map = maps.per_cpu();
@@ -82,10 +89,10 @@ fn main() -> anyhow::Result<()> {
                                     total_cpu_frac += cpu_frac;
                                     "rx_softirq"
                                 },
-                                2 /* EVENT_CONSUME_SKB    */ => "",
+                                2 /* EVENT_CONSUME_SKB    */ => "consume_skb",
                                 3 /* EVENT_BRDIGE         */ => "bridging",
                                 4 /* EVENT_FORWARD        */ => "forwarding",
-                                5 /* EVENT_LOCAL_DELIVER  */ => "",
+                                5 /* EVENT_LOCAL_DELIVER  */ => "local_deliver",
 
                                 _ => unreachable!()
                             };
@@ -120,10 +127,10 @@ fn main() -> anyhow::Result<()> {
                     let metric_name = match event_idx {
                         0 /* EVENT_SOCK_SENDMSG   */ => "tx_syscalls",
                         1 /* EVENT_NET_RX_SOFTIRQ */ => "rx_softirq",
-                        2 /* EVENT_CONSUME_SKB    */ => "",
+                        2 /* EVENT_CONSUME_SKB    */ => "consume_skb",
                         3 /* EVENT_BRDIGE         */ => "bridging",
                         4 /* EVENT_FORWARD        */ => "forwarding",
-                        5 /* EVENT_LOCAL_DELIVER  */ => "",
+                        5 /* EVENT_LOCAL_DELIVER  */ => "local_deliver",
 
                         6 /* TOTAL */                => {
                             tui.set_total_power(((delta_energy as f64) * cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0));
