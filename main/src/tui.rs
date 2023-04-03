@@ -38,6 +38,7 @@ impl Tui {
             .child(TextView::new("TX syscalls").style(black))
             .child(TextView::new("RX softirq").style(black))
             .child(TextView::new(" \u{251c} consume skb").style(black))
+            .child(TextView::new(" \u{251c} driver poll").style(black))
             .child(TextView::new(" \u{251c} bridging").style(black))
             .child(TextView::new(" \u{251c} forwarding").style(black))
             .child(TextView::new(" \u{2514} local deliver").style(black))
@@ -93,6 +94,7 @@ impl Tui {
             ("tx_syscalls", TextContent::new("N/A")),
             ("rx_softirq", TextContent::new("N/A")),
             ("consume_skb", TextContent::new("N/A")),
+            ("driver_poll", TextContent::new("N/A")),
             ("bridging", TextContent::new("N/A")),
             ("forwarding", TextContent::new("N/A")),
             ("local_deliver", TextContent::new("N/A")),
@@ -113,6 +115,7 @@ impl Tui {
             .child(TextView::new_with_content(text_contents["tx_syscalls"].clone()).center())
             .child(TextView::new_with_content(text_contents["rx_softirq"].clone()).center())
             .child(TextView::new_with_content(text_contents["consume_skb"].clone()).center())
+            .child(TextView::new_with_content(text_contents["driver_poll"].clone()).center())
             .child(TextView::new_with_content(text_contents["bridging"].clone()).center())
             .child(TextView::new_with_content(text_contents["forwarding"].clone()).center())
             .child(TextView::new_with_content(text_contents["local_deliver"].clone()).center())

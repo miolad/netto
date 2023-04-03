@@ -45,7 +45,7 @@ fn bindgen_test_layout_per_event_data() {
 #[derive(Debug, Copy, Clone)]
 pub struct per_cpu_data {
     #[doc = " @brief One for each possible event"]
-    pub events: [per_event_data; 6usize],
+    pub events: [per_event_data; 9usize],
 }
 #[test]
 fn bindgen_test_layout_per_cpu_data() {
@@ -53,7 +53,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        96usize,
+        144usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(

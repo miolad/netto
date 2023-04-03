@@ -10,7 +10,7 @@ struct per_event_data {
 
 struct per_cpu_data {
     /// @brief One for each possible event
-    struct per_event_data events[6];
+    struct per_event_data events[9];
 };
 
 #endif
