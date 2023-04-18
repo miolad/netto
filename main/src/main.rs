@@ -1,6 +1,7 @@
 mod bpf {
     include!(concat!(env!("OUT_DIR"), "/prog.bpf.rs"));
 }
+#[allow(warnings)]
 mod common;
 mod tui;
 

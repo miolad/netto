@@ -4,8 +4,8 @@
 #include "vmlinux.h"
 
 struct per_event_data {
-    uint64_t prev_ts;
-    uint64_t total_time;
+    u64 prev_ts;
+    u64 total_time;
 };
 
 struct per_cpu_data {

@@ -21,7 +21,7 @@ struct per_task_data {
 
 struct {
     __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
-    __type(key, uint32_t);
+    __type(key, u32);
     __type(value, struct per_task_data);
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } traced_pids SEC(".maps");
@@ -39,8 +39,8 @@ int BPF_PROG(entry_name) {                                                      
     int zero = 0;                                                                                                             \
     struct per_task_data* per_task_data;                                                                                      \
     struct per_cpu_data* per_cpu_data;                                                                                        \
-    uint64_t now = bpf_ktime_get_ns();                                                                                        \
-    uint32_t ret, nested = 0;                                                                                                 \
+    u64 now = bpf_ktime_get_ns();                                                                                             \
+    u32 ret, nested = 0;                                                                                                      \
                                                                                                                               \
     if (                                                                                                                      \
         likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, entry_flag)) != NULL) && \
@@ -62,8 +62,8 @@ int BPF_PROG(exit_name) {                                                       
     int zero = 0;                                                                                                             \
     struct per_task_data* per_task_data;                                                                                      \
     struct per_cpu_data* per_cpu_data;                                                                                        \
-    uint64_t now = bpf_ktime_get_ns();                                                                                        \
-    uint32_t ret, nested = 0;                                                                                                 \
+    u64 now = bpf_ktime_get_ns();                                                                                             \
+    u32 ret, nested = 0;                                                                                                      \
                                                                                                                               \
     if (                                                                                                                      \
         likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&          \
@@ -86,8 +86,8 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
     int zero = 0;
     struct per_task_data* per_task_data;
     struct per_cpu_data* per_cpu_data;
-    uint64_t now = bpf_ktime_get_ns();
-    uint32_t ret;
+    u64 now = bpf_ktime_get_ns();
+    u32 ret;
 
     if (
         vec == NET_RX_SOFTIRQ                                                                                                                  &&
@@ -110,8 +110,8 @@ int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
     int zero = 0;
     struct per_task_data* per_task_data;
     struct per_cpu_data* per_cpu_data;
-    uint64_t now = bpf_ktime_get_ns();
-    uint32_t ret;
+    u64 now = bpf_ktime_get_ns();
+    u32 ret;
 
     if (
         vec == NET_RX_SOFTIRQ                                                                                     &&
@@ -144,8 +144,8 @@ int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct tas
     int zero = 0;
     struct per_task_data* prev_task_data, * next_task_data;
     struct per_cpu_data* per_cpu_data;
-    uint32_t ret;
-    int64_t now = bpf_ktime_get_ns();
+    u32 ret;
+    u64 now = bpf_ktime_get_ns();
     
     prev_task_data = bpf_task_storage_get(&traced_pids, prev, NULL, 0);
     next_task_data = bpf_task_storage_get(&traced_pids, next, NULL, 0);
@@ -163,7 +163,7 @@ int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct tas
         if (likely(next_task_data != NULL)) {
             ret = event_stack_pop(&next_task_data->stack, EVENT_DUMMY_TASK_SWITCH, per_cpu_data, now, NULL);
 
-            if (unlikely(ret == 0xFFFF))                   bpf_printk("tp_btf/sched_switch: event stack was empty");
+            if (unlikely(ret == 0xFFFF))                       bpf_printk("tp_btf/sched_switch: event stack was empty");
             else if (unlikely(ret != EVENT_DUMMY_TASK_SWITCH)) bpf_printk("tp_btf/sched_switch: popped unexpected event");
         }
     }

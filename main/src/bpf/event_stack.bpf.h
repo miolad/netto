@@ -28,7 +28,7 @@ enum {
  * For example, TRACE_EVENT_CONSUME_SKB is a sub-event of TRACE_EVENT_NET_RX_SOFTIRQ,
  * meaning that it can only happen while in softirq context.
  */
-const uint16_t events[] = {
+const u16 events[] = {
     (1 << EVENT_SOCK_SENDMSG)                                                                                          /** SOCK_SENDMSG      */,
     (1 << EVENT_NET_RX_SOFTIRQ)                                                                                        /** NET_RX_SOFTIRQ    */,
     (1 << EVENT_NET_RX_SOFTIRQ) | (1 << EVENT_CONSUME_SKB)                                                             /** CONSUME_SKB       */,
@@ -49,19 +49,19 @@ const uint16_t events[] = {
  */
 struct event_stack {
     /// @brief Each element is an index into the events array
-    uint16_t stack[EVENT_STACK_SIZE];
+    u16 stack[EVENT_STACK_SIZE];
     /// @brief Index of the first empty frame in the stack
-    uint16_t stack_ptr;
+    u16 stack_ptr;
 };
 
 /**
  * Push a new event to the stack, eventually updating the timings for the previous base and sub events.
  * @returns zero on success
  */
-static inline uint16_t event_stack_push(struct event_stack* stack, uint16_t event_idx, struct per_cpu_data* per_cpu_data, uint64_t now, uint32_t* nested) {
-    uint16_t i, j;
-    uint16_t cur_event_idx;
-    uint16_t cur_event, prev_event = 0xFFFF, event = events[event_idx];
+static inline u16 event_stack_push(struct event_stack* stack, u16 event_idx, struct per_cpu_data* per_cpu_data, u64 now, u32* nested) {
+    u16 i, j;
+    u16 cur_event_idx;
+    u16 cur_event, prev_event = 0xFFFF, event = events[event_idx];
     
     if (likely(stack->stack_ptr < EVENT_STACK_SIZE)) {
         for (i = 0; i < stack->stack_ptr && i < EVENT_STACK_SIZE; ++i) { // Convoluted loop makes the verifier happy
@@ -106,11 +106,11 @@ static inline uint16_t event_stack_push(struct event_stack* stack, uint16_t even
  * Pop the last event from the stack, eventually updating the timestamps for the previous base and sub events.
  * @returns the index of the popped event, or 0xFFFFFFFF if the stack was empty
  */
-static inline uint16_t event_stack_pop(struct event_stack* stack, uint16_t event_idx, struct per_cpu_data* per_cpu_data, uint64_t now, uint32_t* nested) {
-    uint16_t i, j;
-    uint16_t cur_event_idx;
-    uint16_t cur_event, prev_event = 0xFFFF, event = events[event_idx];
-    uint16_t ret, index = stack->stack_ptr - 1;
+static inline u16 event_stack_pop(struct event_stack* stack, u16 event_idx, struct per_cpu_data* per_cpu_data, u64 now, u32* nested) {
+    u16 i, j;
+    u16 cur_event_idx;
+    u16 cur_event, prev_event = 0xFFFF, event = events[event_idx];
+    u16 ret, index = stack->stack_ptr - 1;
 
     if (likely(stack->stack_ptr > 0) && likely(stack->stack_ptr <= EVENT_STACK_SIZE)) {
         ret = stack->stack[index];
@@ -147,7 +147,7 @@ static inline uint16_t event_stack_pop(struct event_stack* stack, uint16_t event
 
         // Identical things that are not accepted by the verifier for some reason:
         // 1)
-            // uint16_t ret = 0, index = stack->stack_ptr - 1;
+            // u16 ret = 0, index = stack->stack_ptr - 1;
             // if (likely(index < EVENT_STACK_SIZE)) ret = stack->stack[index];
             // stack->stack_ptr -= 1;
             // return ret;
