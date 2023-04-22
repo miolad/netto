@@ -15,6 +15,7 @@ fn main() {
     bindgen::Builder::default()
         .header(SRC_H)
         .allowlist_type("per_cpu_data")
+        .allowlist_type("event_types")
         .generate()
         .unwrap()
         .write_to_file("src/common.rs")
@@ -22,5 +23,4 @@ fn main() {
 
     println!("cargo:rerun-if-changed={SRC}");
     println!("cargo:rerun-if-changed={SRC_H}");
-    println!("cargo:rerun-if-changed=src/bpf/event_stack.bpf.h");
 }

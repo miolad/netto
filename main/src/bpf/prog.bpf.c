@@ -10,96 +10,147 @@
 #define unlikely(x) __builtin_expect((x), 0)
 #endif
 
-#include "event_stack.bpf.h"
-
 char LICENSE[] SEC("license") = "GPL";
 
-struct per_task_data {
-    struct bpf_spin_lock lock;
-    struct event_stack stack;
-};
-
+/**
+ * Keeps track of which tasks are currently being tracked,
+ * by associating an event bitfield to each task.
+ * 
+ * To protect against race conditions due to different events
+ * being asynchronous, the value should only ever be updated with
+ * atomic operations.
+ */
 struct {
     __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
     __type(key, u32);
-    __type(value, struct per_task_data);
+    __type(value, u64);
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } traced_pids SEC(".maps");
 
+/**
+ * Per-cpu timestamps and counters
+ */
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(key_size, sizeof(int));
+    __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(struct per_cpu_data));
     __uint(max_entries, 1);
 } per_cpu SEC(".maps");
 
-#define GENERIC_TRACE_EVENT(entry_sec, entry_name, exit_sec, exit_name, entry_flag, event_idx)                                \
-SEC(entry_sec)                                                                                                                \
-int BPF_PROG(entry_name) {                                                                                                    \
-    int zero = 0;                                                                                                             \
-    struct per_task_data* per_task_data;                                                                                      \
-    struct per_cpu_data* per_cpu_data;                                                                                        \
-    u64 now = bpf_ktime_get_ns();                                                                                             \
-    u32 ret, nested = 0;                                                                                                      \
-                                                                                                                              \
-    if (                                                                                                                      \
-        likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, entry_flag)) != NULL) && \
-        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                 \
-    ) {                                                                                                                       \
-        bpf_spin_lock(&per_task_data->lock);                                                                                  \
-        ret = event_stack_push(&per_task_data->stack, event_idx, per_cpu_data, now, &nested);                                 \
-        bpf_spin_unlock(&per_task_data->lock);                                                                                \
-                                                                                                                              \
-        if (unlikely(ret != 0)) bpf_printk(entry_sec ": event stack full");                                                   \
-        else if (!nested) per_cpu_data->events[event_idx].prev_ts = now;                                                      \
-    }                                                                                                                         \
-                                                                                                                              \
-    return 0;                                                                                                                 \
-}                                                                                                                             \
-                                                                                                                              \
-SEC(exit_sec)                                                                                                                 \
-int BPF_PROG(exit_name) {                                                                                                     \
-    int zero = 0;                                                                                                             \
-    struct per_task_data* per_task_data;                                                                                      \
-    struct per_cpu_data* per_cpu_data;                                                                                        \
-    u64 now = bpf_ktime_get_ns();                                                                                             \
-    u32 ret, nested = 0;                                                                                                      \
-                                                                                                                              \
-    if (                                                                                                                      \
-        likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&          \
-        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                 \
-    ) {                                                                                                                       \
-        bpf_spin_lock(&per_task_data->lock);                                                                                  \
-        ret = event_stack_pop(&per_task_data->stack, event_idx, per_cpu_data, now, &nested);                                  \
-        bpf_spin_unlock(&per_task_data->lock);                                                                                \
-                                                                                                                              \
-        if (unlikely(ret == 0xFFFF))         bpf_printk(exit_sec ": event stack was empty");                                  \
-        else if (unlikely(ret != event_idx)) bpf_printk(exit_sec ": popped unexpected event");                                \
-        else if (!nested) per_cpu_data->events[event_idx].total_time += now - per_cpu_data->events[event_idx].prev_ts;        \
-    }                                                                                                                         \
-                                                                                                                              \
-    return 0;                                                                                                                 \
+/**
+ * Buffer with all the captured stack traces.
+ * The buffer is logically split into two equal-sized slots,
+ * that are swapped by the user-space just before each update.
+ * 
+ * Each element of the array encodes:
+ *   - trace size in bytes (32 MSbits) | cpuid (32 LSbits) in the first u64
+ *   - actual trace in the next 127 u64s
+ * 
+ * The array is mmapable to allow fast access from user-space
+ * without the need for expensive syscalls.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(map_flags, BPF_F_MMAPABLE);
+	__uint(key_size, sizeof(u32));
+	__uint(value_size, sizeof(u64)*128);
+    __uint(max_entries, 20000);
+} stack_traces SEC(".maps");
+
+/**
+ * Counters of the number of traces present in each slot of
+ * the `stack_traces` buffer.
+ * 
+ * Their increment must be atomic from the bpf side
+ * as they are shared among all the cpus.
+ */
+u64 stack_traces_count_slot_0 = 0, stack_traces_count_slot_1 = 0;
+
+/**
+ * Slot selector into the `stack_traces` map.
+ * 
+ * The value represents the current offset to be applied to
+ * the buffer, and will therefore only ever be 0 or 10000.
+ * 
+ * A non-zero value means select slot1, otherwise use slot0.
+ */
+u32 stack_traces_slot_off = 0;
+
+inline void stop_all_events(struct per_cpu_data* per_cpu_data, u64 events, u64 now) {
+    u32 i;
+    
+    for (i = 0; i < EVENT_MAX; ++i) {
+        if (events & (1 << i)) {
+            per_cpu_data->events[i].total_time += now - per_cpu_data->events[i].prev_ts;
+
+            if (i == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 0;
+        }
+    }
+}
+
+inline void start_all_events(struct per_cpu_data* per_cpu_data, u64 events, u64 now) {
+    u32 i;
+    
+    for (i = 0; i < EVENT_MAX; ++i) {
+        if (events & (1 << i)) {
+            per_cpu_data->events[i].prev_ts = now;
+
+            if (i == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 1;
+        }
+    }
+}
+
+SEC("fentry/sock_sendmsg")
+int BPF_PROG(sock_sendmsg_entry) {
+    u32 zero = 0;
+    struct per_cpu_data* per_cpu_data;
+    u64* per_task_events, events, now = bpf_ktime_get_ns();
+
+    if (
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                                    &&
+        likely(((events = __sync_fetch_and_or(per_task_events, 1 << EVENT_SOCK_SENDMSG)) & (1 << EVENT_SOCK_SENDMSG)) == 0)
+    ) {
+        stop_all_events(per_cpu_data, events, now);
+        per_cpu_data->events[EVENT_SOCK_SENDMSG].prev_ts = now;
+    }
+    
+    return 0;
+}
+
+SEC("fexit/sock_sendmsg")
+int BPF_PROG(sock_sendmsg_exit) {
+    u32 zero = 0;
+    struct per_cpu_data* per_cpu_data;
+    u64* per_task_events, events, now = bpf_ktime_get_ns();
+
+    if (
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL)            &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                  &&
+        likely(((events = __sync_fetch_and_and(per_task_events, ~(1 << EVENT_SOCK_SENDMSG))) & (1 << EVENT_SOCK_SENDMSG)) != 0)
+    ) {
+        start_all_events(per_cpu_data, events & ~(1 << EVENT_SOCK_SENDMSG), now);
+        per_cpu_data->events[EVENT_SOCK_SENDMSG].total_time += now - per_cpu_data->events[EVENT_SOCK_SENDMSG].prev_ts;
+    }
+    
+    return 0;
 }
 
 SEC("tp_btf/softirq_entry")
 int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
-    int zero = 0;
-    struct per_task_data* per_task_data;
+    u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64 now = bpf_ktime_get_ns();
-    u32 ret;
+    u64* per_task_events, events, now = bpf_ktime_get_ns();
 
     if (
-        vec == NET_RX_SOFTIRQ                                                                                                                  &&
-        likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
-        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
+        vec == NET_RX_SOFTIRQ                                                                                                                    &&
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                                    &&
+        likely(((events = __sync_fetch_and_or(per_task_events, 1 << EVENT_NET_RX_SOFTIRQ)) & (1 << EVENT_NET_RX_SOFTIRQ)) == 0)
     ) {
-        bpf_spin_lock(&per_task_data->lock);
-        ret = event_stack_push(&per_task_data->stack, EVENT_NET_RX_SOFTIRQ, per_cpu_data, now, NULL);
-        bpf_spin_unlock(&per_task_data->lock);
-
-        if (unlikely(ret != 0)) bpf_printk("tp_btf/softirq_entry: event stack full");
-        else per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts = now;
+        stop_all_events(per_cpu_data, events, now);
+        per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts = now;
+        per_cpu_data->enable_stack_trace = 1;
     }
 
     return 0;
@@ -107,66 +158,62 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
 
 SEC("tp_btf/softirq_exit")
 int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
-    int zero = 0;
-    struct per_task_data* per_task_data;
+    u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64 now = bpf_ktime_get_ns();
-    u32 ret;
+    u64* per_task_events, events, now = bpf_ktime_get_ns();
 
     if (
-        vec == NET_RX_SOFTIRQ                                                                                     &&
-        likely((per_task_data = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
-        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
+        vec == NET_RX_SOFTIRQ                                                                                                       &&
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL)                 &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                       &&
+        likely(((events = __sync_fetch_and_and(per_task_events, ~(1 << EVENT_NET_RX_SOFTIRQ))) & (1 << EVENT_NET_RX_SOFTIRQ)) != 0)
     ) {
-        bpf_spin_lock(&per_task_data->lock);
-        ret = event_stack_pop(&per_task_data->stack, EVENT_NET_RX_SOFTIRQ, per_cpu_data, now, NULL);
-        bpf_spin_unlock(&per_task_data->lock);
-
-        if (unlikely(ret == 0xFFFF))                    bpf_printk("tp_btf/softirq_exit: event stack was empty");
-        else if (unlikely(ret != EVENT_NET_RX_SOFTIRQ)) bpf_printk("tp_btf/softirq_exit: popped unexpected event");
-        else per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].total_time += now - per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts;
+        start_all_events(per_cpu_data, events & ~(1 << EVENT_NET_RX_SOFTIRQ), now);
+        per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].total_time += now - per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts;
+        per_cpu_data->enable_stack_trace = 0;
     }
 
     return 0;
 }
 
-GENERIC_TRACE_EVENT("fentry/sock_sendmsg", send_msg_entry, "fexit/sock_sendmsg", send_msg_exit, BPF_LOCAL_STORAGE_GET_F_CREATE, EVENT_SOCK_SENDMSG)
-GENERIC_TRACE_EVENT("fentry/napi_consume_skb", napi_consume_skb_entry, "fexit/napi_consume_skb", napi_consume_skb_exit, 0, EVENT_CONSUME_SKB)
-GENERIC_TRACE_EVENT("fentry/__napi_poll", napi_poll_entry, "fexit/__napi_poll", napi_poll_exit, 0, EVENT_NAPI_POLL)
-GENERIC_TRACE_EVENT("tp_btf/netif_receive_skb_entry", netif_receive_skb_entry, "tp_btf/netif_receive_skb_exit", netif_receive_skb_exit, 0, EVENT_NETIF_RECEIVE_SKB)
-GENERIC_TRACE_EVENT("tp_btf/napi_gro_receive_entry", napi_gro_receive_entry, "tp_btf/napi_gro_receive_exit", napi_gro_receive_exit, 0, EVENT_NETIF_RECEIVE_SKB)
-GENERIC_TRACE_EVENT("fentry/br_handle_frame", br_handle_frame_entry, "fexit/br_handle_frame", br_handle_frame_exit, 0, EVENT_BRIDGE)
-GENERIC_TRACE_EVENT("fentry/ip_forward", ip_forward_entry, "fexit/ip_forward", ip_forward_exit, 0, EVENT_FORWARD)
-GENERIC_TRACE_EVENT("fentry/ip_local_deliver", ip_local_deliver_entry, "fexit/ip_local_deliver", ip_local_deliver_exit, 0, EVENT_LOCAL_DELIVER)
-
 SEC("tp_btf/sched_switch")
 int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct task_struct* next) {
-    int zero = 0;
-    struct per_task_data* prev_task_data, * next_task_data;
+    u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u32 ret;
-    u64 now = bpf_ktime_get_ns();
+    u64* prev_task_events, * next_task_events, now = bpf_ktime_get_ns();
     
-    prev_task_data = bpf_task_storage_get(&traced_pids, prev, NULL, 0);
-    next_task_data = bpf_task_storage_get(&traced_pids, next, NULL, 0);
+    prev_task_events = bpf_task_storage_get(&traced_pids, prev, NULL, 0);
+    next_task_events = bpf_task_storage_get(&traced_pids, next, NULL, 0);
     per_cpu_data   = bpf_map_lookup_elem(&per_cpu, &zero);
 
     if (likely(per_cpu_data != NULL)) {
-        if (likely(prev_task_data != NULL)) {
-            bpf_spin_lock(&prev_task_data->lock);
-            ret = event_stack_push(&prev_task_data->stack, EVENT_DUMMY_TASK_SWITCH, per_cpu_data, now, NULL);
-            bpf_spin_unlock(&prev_task_data->lock);
-
-            if (unlikely(ret != 0)) bpf_printk("tp_btf/sched_switch: event stack full");
-        }
-
-        if (likely(next_task_data != NULL)) {
-            ret = event_stack_pop(&next_task_data->stack, EVENT_DUMMY_TASK_SWITCH, per_cpu_data, now, NULL);
-
-            if (unlikely(ret == 0xFFFF))                       bpf_printk("tp_btf/sched_switch: event stack was empty");
-            else if (unlikely(ret != EVENT_DUMMY_TASK_SWITCH)) bpf_printk("tp_btf/sched_switch: popped unexpected event");
-        }
+        if (likely(prev_task_events != NULL)) stop_all_events(per_cpu_data, *prev_task_events, now);
+        if (likely(next_task_events != NULL)) start_all_events(per_cpu_data, *next_task_events, now);
     }
     
+    return 0;
+}
+
+SEC("perf_event")
+int perf_event_prog(struct bpf_perf_event_data* ctx) {
+    struct per_cpu_data* per_cpu_data;
+    u32 index, zero = 0;
+    u64* buf;
+    
+    if (
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL) &&
+        per_cpu_data->enable_stack_trace
+    ) {
+        index = __sync_fetch_and_add(
+            stack_traces_slot_off ? &stack_traces_count_slot_1 : &stack_traces_count_slot_0,
+            1
+        ) + stack_traces_slot_off;
+        
+        if (likely((buf = bpf_map_lookup_elem(&stack_traces, &index)) != NULL)) {
+            *buf = (u64)bpf_get_smp_processor_id() |
+                   ((u64)bpf_get_stack(ctx, buf+1, sizeof(u64)*127, 0) << 32);
+        }
+    }
+
     return 0;
 }

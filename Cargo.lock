@@ -594,6 +594,8 @@ dependencies = [
  "cursive",
  "libbpf-cargo",
  "libbpf-rs",
+ "libc",
+ "perf-event-open-sys",
  "powercap",
 ]
 
@@ -795,6 +797,15 @@ name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
+
+[[package]]
+name = "perf-event-open-sys"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c44fb1c7651a45a3652c4afc6e754e40b3d6e6556f1487e2b230bfc4f33c2a8"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "pkg-config"
