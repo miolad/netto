@@ -138,19 +138,20 @@ int BPF_PROG(sock_sendmsg_exit) {
 
 SEC("tp_btf/softirq_entry")
 int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
-    u32 zero = 0;
+    u32 zero = 0, softirq_ev = vec - 1;
     struct per_cpu_data* per_cpu_data;
     u64* per_task_events, events, now = bpf_ktime_get_ns();
 
     if (
-        vec == NET_RX_SOFTIRQ                                                                                                                    &&
+        (vec == NET_TX_SOFTIRQ || vec == NET_RX_SOFTIRQ)                                                                                         &&
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                                    &&
-        likely(((events = __sync_fetch_and_or(per_task_events, 1 << EVENT_NET_RX_SOFTIRQ)) & (1 << EVENT_NET_RX_SOFTIRQ)) == 0)
+        likely(((events = __sync_fetch_and_or(per_task_events, 1 << softirq_ev)) & (1 << softirq_ev)) == 0)
     ) {
         stop_all_events(per_cpu_data, events, now);
-        per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts = now;
-        per_cpu_data->enable_stack_trace = 1;
+        // Useless check makes the verifier happy
+        if (softirq_ev < EVENT_MAX) per_cpu_data->events[softirq_ev].prev_ts = now;
+        if (softirq_ev == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 1;
     }
 
     return 0;
@@ -158,19 +159,20 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
 
 SEC("tp_btf/softirq_exit")
 int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
-    u32 zero = 0;
+    u32 zero = 0, softirq_ev = vec - 1;
     struct per_cpu_data* per_cpu_data;
     u64* per_task_events, events, now = bpf_ktime_get_ns();
 
     if (
-        vec == NET_RX_SOFTIRQ                                                                                                       &&
+        (vec == NET_TX_SOFTIRQ || vec == NET_RX_SOFTIRQ)                                                                            &&
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL)                 &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)                                                       &&
-        likely(((events = __sync_fetch_and_and(per_task_events, ~(1 << EVENT_NET_RX_SOFTIRQ))) & (1 << EVENT_NET_RX_SOFTIRQ)) != 0)
+        likely(((events = __sync_fetch_and_and(per_task_events, ~(1 << softirq_ev))) & (1 << softirq_ev)) != 0)
     ) {
-        start_all_events(per_cpu_data, events & ~(1 << EVENT_NET_RX_SOFTIRQ), now);
-        per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].total_time += now - per_cpu_data->events[EVENT_NET_RX_SOFTIRQ].prev_ts;
-        per_cpu_data->enable_stack_trace = 0;
+        start_all_events(per_cpu_data, events & ~(1 << softirq_ev), now);
+        // Useless check makes the verifier happy
+        if (softirq_ev < EVENT_MAX) per_cpu_data->events[softirq_ev].total_time += now - per_cpu_data->events[softirq_ev].prev_ts;
+        if (softirq_ev == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 0;
     }
 
     return 0;

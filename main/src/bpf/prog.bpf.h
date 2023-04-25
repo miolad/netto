@@ -5,9 +5,10 @@
 
 enum event_types {
     EVENT_SOCK_SENDMSG   = 0,
-    EVENT_NET_RX_SOFTIRQ = 1,
+    EVENT_NET_TX_SOFTIRQ = 1,
+    EVENT_NET_RX_SOFTIRQ = 2,
 
-    EVENT_MAX            = 2
+    EVENT_MAX            = 3
 };
 
 struct per_event_data {

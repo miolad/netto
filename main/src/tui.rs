@@ -35,11 +35,16 @@ impl Tui {
             )
             .child(DummyView)
             .child(TextView::new("TX syscalls").style(black))
+            .child(TextView::new("TX softirq").style(black))
             .child(TextView::new("RX softirq").style(black))
             .child(TextView::new(" \u{251c} driver poll").style(black))
             .child(TextView::new(" \u{251c} XDP generic").style(black))
             .child(TextView::new(" \u{251c} TC classify").style(black))
+            .child(TextView::new(" \u{251c} NF ingress").style(black))
             .child(TextView::new(" \u{251c} bridging").style(black))
+            .child(TextView::new(" \u{251c} NF prerouting").style(black))
+            .child(TextView::new(" \u{2502} \u{251c} v4").style(black))
+            .child(TextView::new(" \u{2502} \u{251c} v6").style(black))
             .child(TextView::new(" \u{251c} forwarding").style(black))
             .child(TextView::new(" \u{2502} \u{251c} v4").style(black))
             .child(TextView::new(" \u{2502} \u{2514} v6").style(black))
@@ -96,11 +101,15 @@ impl Tui {
     fn cpu_col(title: impl ToString) -> (LinearLayout, HashMap<&'static str, TextContent>) {
         let text_contents = HashMap::from([
             ("tx_syscalls", TextContent::new("N/A")),
+            ("tx_softirq", TextContent::new("N/A")),
             ("rx_softirq", TextContent::new("N/A")),
             ("driver_poll", TextContent::new("N/A")),
             ("xdp_generic", TextContent::new("N/A")),
             ("tc_classify", TextContent::new("N/A")),
+            ("nf_ingress", TextContent::new("N/A")),
             ("bridging", TextContent::new("N/A")),
+            ("nf_prerouting_v4", TextContent::new("N/A")),
+            ("nf_prerouting_v6", TextContent::new("N/A")),
             ("forwarding_v4", TextContent::new("N/A")),
             ("forwarding_v6", TextContent::new("N/A")),
             ("local_deliver_v4", TextContent::new("N/A")),
@@ -120,11 +129,16 @@ impl Tui {
             )
             .child(DummyView)
             .child(TextView::new_with_content(text_contents["tx_syscalls"].clone()).center())
+            .child(TextView::new_with_content(text_contents["tx_softirq"].clone()).center())
             .child(TextView::new_with_content(text_contents["rx_softirq"].clone()).center())
             .child(TextView::new_with_content(text_contents["driver_poll"].clone()).center())
             .child(TextView::new_with_content(text_contents["xdp_generic"].clone()).center())
             .child(TextView::new_with_content(text_contents["tc_classify"].clone()).center())
+            .child(TextView::new_with_content(text_contents["nf_ingress"].clone()).center())
             .child(TextView::new_with_content(text_contents["bridging"].clone()).center())
+            .child(DummyView)
+            .child(TextView::new_with_content(text_contents["nf_prerouting_v4"].clone()).center())
+            .child(TextView::new_with_content(text_contents["nf_prerouting_v6"].clone()).center())
             .child(DummyView)
             .child(TextView::new_with_content(text_contents["forwarding_v4"].clone()).center())
             .child(TextView::new_with_content(text_contents["forwarding_v6"].clone()).center())

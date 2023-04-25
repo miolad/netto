@@ -8,7 +8,7 @@ mod ksyms;
 
 use std::{time::{Duration, Instant}, thread};
 use anyhow::anyhow;
-use common::{event_types_EVENT_MAX, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_RX_SOFTIRQ};
+use common::{event_types_EVENT_MAX, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_NET_TX_SOFTIRQ};
 use ksyms::{KSyms, Counts};
 use libbpf_rs::{MapFlags, num_possible_cpus};
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
@@ -171,6 +171,7 @@ fn main() -> anyhow::Result<()> {
                         #[allow(non_upper_case_globals)]
                         let metric_name = match event_idx as u32 {
                             event_types_EVENT_SOCK_SENDMSG   => "tx_syscalls",
+                            event_types_EVENT_NET_TX_SOFTIRQ => "tx_softirq",
                             event_types_EVENT_NET_RX_SOFTIRQ => {
                                 // Update sub-events
                                 let denominator = counts[cpuid].net_rx_action.max(1) as f64;
@@ -180,13 +181,6 @@ fn main() -> anyhow::Result<()> {
                                     cpuid,
                                     "driver_poll",
                                     *cpu_frac * (counts[cpuid].__napi_poll - counts[cpuid].netif_receive_skb) as f64 / denominator
-                                );
-
-                                // Bridging
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "bridging",
-                                    *cpu_frac * (counts[cpuid].br_handle_frame - counts[cpuid].netif_receive_skb_sub_br) as f64 / denominator
                                 );
 
                                 // XDP generic
@@ -201,6 +195,33 @@ fn main() -> anyhow::Result<()> {
                                     cpuid,
                                     "tc_classify",
                                     *cpu_frac * counts[cpuid].tcf_classify as f64 / denominator
+                                );
+
+                                // NF ingress
+                                let _ = tui.set_val(
+                                    cpuid,
+                                    "nf_ingress",
+                                    *cpu_frac * counts[cpuid].nf_netdev_ingress as f64 / denominator
+                                );
+
+                                // Bridging
+                                let _ = tui.set_val(
+                                    cpuid,
+                                    "bridging",
+                                    *cpu_frac * (counts[cpuid].br_handle_frame - counts[cpuid].netif_receive_skb_sub_br) as f64 / denominator
+                                );
+
+                                // NF prerouting
+                                let _ = tui.set_val(
+                                    cpuid,
+                                    "nf_prerouting_v4",
+                                    *cpu_frac * counts[cpuid].nf_prerouting_v4 as f64 / denominator
+                                );
+
+                                let _ = tui.set_val(
+                                    cpuid,
+                                    "nf_prerouting_v6",
+                                    *cpu_frac * counts[cpuid].nf_prerouting_v6 as f64 / denominator
                                 );
 
                                 // Forwarding
@@ -259,6 +280,7 @@ fn main() -> anyhow::Result<()> {
                     #[allow(non_upper_case_globals)]
                     let metric_name = match event_idx as u32 {
                         event_types_EVENT_SOCK_SENDMSG   => "tx_syscalls",
+                        event_types_EVENT_NET_TX_SOFTIRQ => "tx_softirq",
                         event_types_EVENT_NET_RX_SOFTIRQ => {
                             // Update sub-events
                             let total_counts = counts
@@ -288,12 +310,32 @@ fn main() -> anyhow::Result<()> {
                                 "tc_classify",
                                 cpu_frac * total_counts.tcf_classify as f64 / denominator
                             );
+
+                            // NF ingress
+                            let _ = tui.set_val(
+                                num_possible_cpus,
+                                "nf_ingress",
+                                cpu_frac * total_counts.nf_netdev_ingress as f64 / denominator
+                            );
                             
                             // Bridging
                             let _ = tui.set_val(
                                 num_possible_cpus,
                                 "bridging",
                                 cpu_frac * (total_counts.br_handle_frame - total_counts.netif_receive_skb_sub_br) as f64 / denominator
+                            );
+
+                            // NF prerouting
+                            let _ = tui.set_val(
+                                num_possible_cpus,
+                                "nf_prerouting_v4",
+                                cpu_frac * total_counts.nf_prerouting_v4 as f64 / denominator
+                            );
+
+                            let _ = tui.set_val(
+                                num_possible_cpus,
+                                "nf_prerouting_v6",
+                                cpu_frac * total_counts.nf_prerouting_v6 as f64 / denominator
                             );
                             
                             // Forwarding
