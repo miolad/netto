@@ -82,7 +82,6 @@ inline void stop_all_events(struct per_cpu_data* per_cpu_data, u64 events, u64 n
     for (i = 0; i < EVENT_MAX; ++i) {
         if (events & (1 << i)) {
             per_cpu_data->events[i].total_time += now - per_cpu_data->events[i].prev_ts;
-
             if (i == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 0;
         }
     }
@@ -94,7 +93,6 @@ inline void start_all_events(struct per_cpu_data* per_cpu_data, u64 events, u64 
     for (i = 0; i < EVENT_MAX; ++i) {
         if (events & (1 << i)) {
             per_cpu_data->events[i].prev_ts = now;
-
             if (i == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 1;
         }
     }
@@ -186,11 +184,11 @@ int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct tas
     
     prev_task_events = bpf_task_storage_get(&traced_pids, prev, NULL, 0);
     next_task_events = bpf_task_storage_get(&traced_pids, next, NULL, 0);
-    per_cpu_data   = bpf_map_lookup_elem(&per_cpu, &zero);
+    per_cpu_data     = bpf_map_lookup_elem(&per_cpu, &zero);
 
     if (likely(per_cpu_data != NULL)) {
-        if (likely(prev_task_events != NULL)) stop_all_events(per_cpu_data, *prev_task_events, now);
-        if (likely(next_task_events != NULL)) start_all_events(per_cpu_data, *next_task_events, now);
+        if (prev_task_events != NULL) stop_all_events(per_cpu_data, *prev_task_events, now);
+        if (next_task_events != NULL) start_all_events(per_cpu_data, *next_task_events, now);
     }
     
     return 0;

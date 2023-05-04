@@ -55,7 +55,7 @@ impl KSyms {
             btree.insert(addr, name.to_string());
         }
 
-        // Keep only the symbols we're interested in
+        // Only keep the symbols we're interested in
         let syms = btree
             .iter()
             .filter_map(|(&range_start, name)| {
