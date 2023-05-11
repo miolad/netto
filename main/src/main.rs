@@ -6,14 +6,13 @@ mod common;
 mod tui;
 mod ksyms;
 
-use std::{time::{Duration, Instant}, thread};
+use std::{time::{Duration, Instant}, thread, cell::UnsafeCell};
 use anyhow::anyhow;
 use common::{event_types_EVENT_MAX, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_NET_TX_SOFTIRQ};
 use ksyms::{KSyms, Counts};
-use libbpf_rs::{MapFlags, num_possible_cpus};
+use libbpf_rs::{MapFlags, num_possible_cpus, RingBufferBuilder};
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
 use powercap::PowerCap;
-use libc::{mmap, PROT_READ, MAP_SHARED, MAP_FAILED};
 use tui::Tui;
 
 fn main() -> anyhow::Result<()> {
@@ -31,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         
                     // Sampling frequency
                     __bindgen_anon_1: perf_event_open_sys::bindings::perf_event_attr__bindgen_ty_1 {
-                        sample_freq: 1000
+                        sample_freq: 10000
                     },
         
                     ..Default::default()
@@ -64,29 +63,40 @@ fn main() -> anyhow::Result<()> {
     let _sock_sendmsg_entry_link = skel.progs_mut().sock_sendmsg_entry().attach()?;
     let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
 
-    // Mmap traces array
-    let map_ptr = unsafe { mmap(
-        std::ptr::null_mut(),
-        std::mem::size_of::<u64>() * 128 * 20_000,
-        PROT_READ,
-        MAP_SHARED,
-        skel.maps().stack_traces().fd(),
-        0
-    ) } as *const u64;
-    if map_ptr as usize == MAP_FAILED as usize {
-        eprintln!("mmap failed");
-        return Err(std::io::Error::last_os_error().into());
-    }
-
+    let num_possible_cpus = num_possible_cpus()?;
+    let counts = UnsafeCell::new(vec![Counts::default(); num_possible_cpus]);
     let ksyms = KSyms::load()?;
+    
+    let ringbuf = {
+        let mut builder = RingBufferBuilder::new();
+        builder.add(skel.maps().stack_traces(), |data| {
+            let (counts, buf) = unsafe {(
+                &mut *counts.get(),
+                std::slice::from_raw_parts(data.as_ptr() as *const u64, data.len() / 8)
+            )};
+
+            let (trace_size, cpuid) = {
+                let v = buf[0];
+                
+                // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
+                ((v >> 35) as usize, (v & 0xFFFFFFFF) as usize)
+            };
+
+            counts[cpuid].acc_trace(
+                &ksyms,
+                &buf[..trace_size]
+            );
+            
+            0
+        })?;
+        builder.build()?
+    };
 
     let rapl = PowerCap::try_default()
         .map_err(|_| anyhow!("RAPL: Failed to open powercap interface from /sys/class/powercap"))?
         .intel_rapl;
 
-    let num_possible_cpus = num_possible_cpus()?;
     let mut prev_total_times = vec![vec![0u64; event_types_EVENT_MAX as usize]; num_possible_cpus];
-    let mut counts = vec![Counts::default(); num_possible_cpus];
     let mut prev_instant = Instant::now();
 
     let mut prev_total_energy = 0;
@@ -108,46 +118,21 @@ fn main() -> anyhow::Result<()> {
         let delta_energy = current_total_energy - prev_total_energy;
         prev_total_energy = current_total_energy;
 
-        {
-            // Swap buffer slots and get the number of stack traces in the previously active slot
-            let slot_off = skel.bss().stack_traces_slot_off as usize;
-            let num_traces_ref;
-            (skel.bss().stack_traces_slot_off, num_traces_ref) = if slot_off > 0 {
-                (0,      &mut skel.bss().stack_traces_count_slot_1)
-            } else {
-                (10_000, &mut skel.bss().stack_traces_count_slot_0)
-            };
-
-            // Make sure to read the count *after* swapping the slots
-            let num_traces = *num_traces_ref;
-            
-            // Reset previous counts
-            for count in &mut counts {
+        // Reset previous counts
+        unsafe {
+            let counts = &mut *counts.get();
+            for count in counts {
                 *count = Default::default();
             }
-            
-            // Count symbols
-            unsafe {
-                for trace_ptr in (0..num_traces as usize).map(|trace_idx| map_ptr.add((slot_off + trace_idx) * 128)) {
-                    // Get the cpuid
-                    let (trace_size, cpuid) = {
-                        let v = trace_ptr.read_volatile();
-
-                        // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
-                        (v >> 35, v & 0xFFFFFFFF)
-                    };
-
-                    counts[cpuid as usize].acc_trace(
-                        &ksyms,
-                        trace_ptr.add(1),
-                        trace_size as _
-                    );
-                }
-            }
-
-            // Reset the stack traces index for this slot
-            *num_traces_ref = 0;
         }
+        
+        // Drain the ringbuf
+        ringbuf.consume()?;
+
+        // Release counts ref
+        let counts = unsafe {
+            &*counts.get()
+        };
 
         if let Some(stats) = skel.maps().per_cpu().lookup_percpu(&0i32.to_le_bytes(), MapFlags::empty())? {
             let total_cpu_frac = stats

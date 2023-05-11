@@ -11,7 +11,6 @@ perf-event-open-sys = "4.0"
 anyhow = "1.0"
 powercap = "0.3"
 cursive = "0.20"
-libc = "0.2"
 
 [build-dependencies]
 libbpf-cargo = "0.20"

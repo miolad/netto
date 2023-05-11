@@ -153,14 +153,12 @@ impl KSyms {
 impl Counts {
     /// Iterate over the frames in the trace and accumulate the instances of the symbols in this Counts
     #[inline]
-    pub unsafe fn acc_trace(&mut self, ksyms: &KSyms, trace_ptr: *const u64, max_frames: usize) {
+    pub fn acc_trace(&mut self, ksyms: &KSyms, trace: &[u64]) {
         let mut c = Self::default();
         let mut in_nf_hook = 0;
         let mut ip_rcv_finish = 0;
         
-        for frame_idx in 0..max_frames {
-            // Load stack frame
-            let ip = trace_ptr.add(frame_idx).read_volatile();
+        for &ip in trace {
             if ip == 0 {
                 break;
             }

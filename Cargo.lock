@@ -594,7 +594,6 @@ dependencies = [
  "cursive",
  "libbpf-cargo",
  "libbpf-rs",
- "libc",
  "perf-event-open-sys",
  "powercap",
 ]
