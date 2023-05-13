@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         
                     // Sampling frequency
                     __bindgen_anon_1: perf_event_open_sys::bindings::perf_event_attr__bindgen_ty_1 {
-                        sample_freq: 10000
+                        sample_freq: 1000
                     },
         
                     ..Default::default()

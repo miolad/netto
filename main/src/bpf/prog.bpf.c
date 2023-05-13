@@ -37,6 +37,13 @@ struct {
     __uint(max_entries, 1);
 } per_cpu SEC(".maps");
 
+/**
+ * Ringbuffer for passing stack traces to the user-space.
+ * 
+ * Each element encodes:
+ *  - trace size in bytes (32 MSbits) | cpuid (32 LSbits) in the first u64
+ *  - actual trace in the next 127 u64s
+ */
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 20 * 1024 * 1024);
