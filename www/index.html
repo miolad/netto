@@ -1,0 +1,31 @@
+<html>
+    <head>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+    </head>
+    <body>
+        <table>
+        </table>
+
+        <style>
+            td {
+                white-space: pre;
+                font-family: monospace;
+            }
+            th {
+                white-space: pre;
+                text-align: left;
+                font-family: monospace;
+            }
+        </style>
+        
+        <script type="module">
+            import init from '/pkg/web_frontend.js';
+
+            async function run() {
+                await init();
+            }
+
+            run();
+        </script>
+    </body>
+</html>

@@ -3,370 +3,124 @@ mod bpf {
 }
 #[allow(warnings)]
 mod common;
-mod tui;
+// mod tui;
 mod ksyms;
+mod actors;
 
-use std::{time::{Duration, Instant}, thread, cell::UnsafeCell};
+use actix::{Actor, Addr};
+use actix_files::Files;
+use actix_web::{HttpServer, App, rt::System, HttpRequest, web, HttpResponse};
+use actix_web_actors::ws;
+use actors::trace_analyzer::TraceAnalyzer;
 use anyhow::anyhow;
-use common::{event_types_EVENT_MAX, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_NET_TX_SOFTIRQ};
-use ksyms::{KSyms, Counts};
-use libbpf_rs::{MapFlags, num_possible_cpus, RingBufferBuilder};
+use libbpf_rs::{num_possible_cpus, query::MapInfoIter};
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
-use powercap::PowerCap;
-use tui::Tui;
+use tokio::sync::mpsc::unbounded_channel;
+use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient};
+
+#[actix_web::get("/ws/")]
+async fn ws_get(
+    req: HttpRequest,
+    stream: web::Payload,
+    collector: web::Data<Addr<MetricsCollector>>
+) -> Result<HttpResponse, actix_web::Error> {
+    ws::start(WebsocketClient::new(collector.get_ref().clone()), &req, stream)
+}
 
 fn main() -> anyhow::Result<()> {
-    let open_skel = bpf::ProgSkelBuilder::default().open()?;
-    let mut skel = open_skel.load()?;
+    System::new().block_on(async {
+        // Init BPF: open the libbpf skeleton, load the progs and attach them
+        let open_skel = bpf::ProgSkelBuilder::default().open()?;
+        let mut skel = open_skel.load()?;
+        let num_possible_cpus = num_possible_cpus()?;
 
-    // Open the perf events (one for each CPU)
-    let perf_event_fds = unsafe {
-        (0..num_possible_cpus()?)
-            .map(|cpuid| {
-                let mut attrs = perf_event_attr {
-                    size: std::mem::size_of::<perf_event_attr>() as _,
-                    type_: PERF_TYPE_SOFTWARE,
-                    config: PERF_COUNT_SW_CPU_CLOCK as _,
-        
-                    // Sampling frequency
-                    __bindgen_anon_1: perf_event_open_sys::bindings::perf_event_attr__bindgen_ty_1 {
-                        sample_freq: 1000
-                    },
-        
-                    ..Default::default()
-                };
-        
-                // Only count kernel-space events
-                attrs.set_exclude_user(1);
-        
-                // Use frequency instead of period
-                attrs.set_freq(1);
-        
-                perf_event_open(&mut attrs, -1, cpuid as _, -1, 0)
-            })
-            .collect::<Vec<_>>()
-    };
+        // Explicitly attach entry programs last (because the task-local storage can only be allocated by them)
+        let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
+        let _sock_sendmsg_exit_link = skel.progs_mut().sock_sendmsg_exit().attach()?;
+        let _net_rx_softirq_exit_link = skel.progs_mut().net_rx_softirq_exit().attach()?;
 
-    // Explicitly attach entry programs last (because the task-local storage can only be allocated by them)
-    let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
-    let _sock_sendmsg_exit_link = skel.progs_mut().sock_sendmsg_exit().attach()?;
-    let _net_rx_softirq_exit_link = skel.progs_mut().net_rx_softirq_exit().attach()?;
+        // Open and attach a perf-event program for each CPU
+        let _perf_event_links = unsafe {
+            let iter = (0..num_possible_cpus)
+                .map(|cpuid| {
+                    let mut attrs = perf_event_attr {
+                        size: std::mem::size_of::<perf_event_attr>() as _,
+                        type_: PERF_TYPE_SOFTWARE,
+                        config: PERF_COUNT_SW_CPU_CLOCK as _,
 
-    // Also attach the "perf_event_prog" program to all the perf events
-    let _perf_event_links = perf_event_fds
-        .iter()
-        .map(|&fd| {
-            skel.progs_mut().perf_event_prog().attach_perf_event(fd).unwrap()
-        })
-        .collect::<Vec<_>>();
-
-    let _sock_sendmsg_entry_link = skel.progs_mut().sock_sendmsg_entry().attach()?;
-    let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
-
-    let num_possible_cpus = num_possible_cpus()?;
-    let counts = UnsafeCell::new(vec![Counts::default(); num_possible_cpus]);
-    let ksyms = KSyms::load()?;
-    
-    let ringbuf = {
-        let mut builder = RingBufferBuilder::new();
-        builder.add(skel.maps().stack_traces(), |data| {
-            let (counts, buf) = unsafe {(
-                &mut *counts.get(),
-                std::slice::from_raw_parts(data.as_ptr() as *const u64, data.len() / 8)
-            )};
-
-            let (trace_size, cpuid) = {
-                let v = buf[0];
-                
-                // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
-                ((v >> 35) as usize, (v & 0xFFFFFFFF) as usize)
-            };
-
-            counts[cpuid].acc_trace(
-                &ksyms,
-                &buf[..trace_size]
-            );
-            
-            0
-        })?;
-        builder.build()?
-    };
-
-    let rapl = PowerCap::try_default()
-        .map_err(|_| anyhow!("RAPL: Failed to open powercap interface from /sys/class/powercap"))?
-        .intel_rapl;
-
-    let mut prev_total_times = vec![vec![0u64; event_types_EVENT_MAX as usize]; num_possible_cpus];
-    let mut prev_instant = Instant::now();
-
-    let mut prev_total_energy = 0;
-
-    let (mut tui_runnable, mut tui) = Tui::init(num_possible_cpus);
-    let mut tui_runner = tui_runnable.runner();
-
-    while tui_runner.is_running() {
-        thread::sleep(Duration::from_millis(500 - prev_instant.elapsed().as_millis().min(500) as u64));
-        let current_instant = Instant::now();
-        let delta_time = current_instant.duration_since(prev_instant);
-        prev_instant = current_instant;
-
-        let current_total_energy = rapl
-            .sockets
-            .values()
-            .flat_map(|socket| socket.energy())
-            .sum();
-        let delta_energy = current_total_energy - prev_total_energy;
-        prev_total_energy = current_total_energy;
-
-        // Reset previous counts
-        unsafe {
-            let counts = &mut *counts.get();
-            for count in counts {
-                *count = Default::default();
-            }
-        }
-        
-        // Drain the ringbuf
-        ringbuf.consume()?;
-
-        // Release counts ref
-        let counts = unsafe {
-            &*counts.get()
-        };
-
-        if let Some(stats) = skel.maps().per_cpu().lookup_percpu(&0i32.to_le_bytes(), MapFlags::empty())? {
-            let total_cpu_frac = stats
-                .iter()
-                .zip(prev_total_times.iter_mut())
-                .enumerate()
-                .map(|(cpuid, (cpu_stats, prev_total_cpu_times))| {
-                    let mut cpu_times = unsafe {
-                        &*(cpu_stats.as_ptr() as *const common::per_cpu_data)
-                    }.events
-                        .iter()
-                        .zip(prev_total_cpu_times.iter_mut())
-                        .map(|(common::per_event_data { total_time, .. }, prev_total_time)| {
-                            let delta_cpu_time = total_time - *prev_total_time;
-                            *prev_total_time = *total_time;
-                            (delta_cpu_time as f64) / (delta_time.as_nanos() as f64)
-                        })
-                        .collect::<Vec<_>>();
-
-                    for (event_idx, cpu_frac) in cpu_times.iter_mut().enumerate() {
-                        #[allow(non_upper_case_globals)]
-                        let metric_name = match event_idx as u32 {
-                            event_types_EVENT_SOCK_SENDMSG   => "tx_syscalls",
-                            event_types_EVENT_NET_TX_SOFTIRQ => "tx_softirq",
-                            event_types_EVENT_NET_RX_SOFTIRQ => {
-                                // Update sub-events
-                                let denominator = counts[cpuid].net_rx_action.max(1) as f64;
-                                
-                                // Driver poll
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "driver_poll",
-                                    *cpu_frac * (counts[cpuid].__napi_poll - counts[cpuid].netif_receive_skb) as f64 / denominator
-                                );
-
-                                // XDP generic
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "xdp_generic",
-                                    *cpu_frac * counts[cpuid].do_xdp_generic as f64 / denominator
-                                );
-
-                                // TC classify
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "tc_classify",
-                                    *cpu_frac * counts[cpuid].tcf_classify as f64 / denominator
-                                );
-
-                                // NF ingress
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "nf_ingress",
-                                    *cpu_frac * counts[cpuid].nf_netdev_ingress as f64 / denominator
-                                );
-
-                                // Bridging
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "bridging",
-                                    *cpu_frac * (counts[cpuid].br_handle_frame - counts[cpuid].netif_receive_skb_sub_br) as f64 / denominator
-                                );
-
-                                // NF prerouting
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "nf_prerouting_v4",
-                                    *cpu_frac * counts[cpuid].nf_prerouting_v4 as f64 / denominator
-                                );
-
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "nf_prerouting_v6",
-                                    *cpu_frac * counts[cpuid].nf_prerouting_v6 as f64 / denominator
-                                );
-
-                                // Forwarding
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "forwarding_v4",
-                                    *cpu_frac * counts[cpuid].ip_forward as f64 / denominator
-                                );
-
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "forwarding_v6",
-                                    *cpu_frac * counts[cpuid].ip6_forward as f64 / denominator
-                                );
-
-                                // Local deliver
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "local_deliver_v4",
-                                    *cpu_frac * counts[cpuid].ip_local_deliver as f64 / denominator
-                                );
-
-                                let _ = tui.set_val(
-                                    cpuid,
-                                    "local_deliver_v6",
-                                    *cpu_frac * counts[cpuid].ip6_input as f64 / denominator
-                                );
-                                
-                                "rx_softirq"
-                            },
-                            _ => unreachable!()
-                        };
-
-                        let _ = tui.set_val(cpuid, metric_name, *cpu_frac);
-                    }
-
-                    let _ = tui.set_val(cpuid, "total", cpu_times.iter().sum());
-                    cpu_times
-                })
-                .reduce(|mut acc, e| {
-                    acc
-                        .iter_mut()
-                        .zip(e.iter())
-                        .for_each(|(acc, e)| {
-                            *acc += *e;
-                        });
-
-                    acc
-                })
-                .unwrap()
-                .iter()
-                .enumerate()
-                .map(|(event_idx, e)| {
-                    let cpu_frac = e / (num_possible_cpus as f64);
-                    
-                    #[allow(non_upper_case_globals)]
-                    let metric_name = match event_idx as u32 {
-                        event_types_EVENT_SOCK_SENDMSG   => "tx_syscalls",
-                        event_types_EVENT_NET_TX_SOFTIRQ => "tx_softirq",
-                        event_types_EVENT_NET_RX_SOFTIRQ => {
-                            // Update sub-events
-                            let total_counts = counts
-                                .iter()
-                                .cloned()
-                                .sum::<Counts>();
-
-                            let denominator = total_counts.net_rx_action.max(1) as f64;
-                            
-                            // Driver poll
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "driver_poll",
-                                cpu_frac * (total_counts.__napi_poll - total_counts.netif_receive_skb) as f64 / denominator
-                            );
-
-                            // XDP generic
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "xdp_generic",
-                                cpu_frac * total_counts.do_xdp_generic as f64 / denominator
-                            );
-
-                            // TC classify
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "tc_classify",
-                                cpu_frac * total_counts.tcf_classify as f64 / denominator
-                            );
-
-                            // NF ingress
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "nf_ingress",
-                                cpu_frac * total_counts.nf_netdev_ingress as f64 / denominator
-                            );
-                            
-                            // Bridging
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "bridging",
-                                cpu_frac * (total_counts.br_handle_frame - total_counts.netif_receive_skb_sub_br) as f64 / denominator
-                            );
-
-                            // NF prerouting
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "nf_prerouting_v4",
-                                cpu_frac * total_counts.nf_prerouting_v4 as f64 / denominator
-                            );
-
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "nf_prerouting_v6",
-                                cpu_frac * total_counts.nf_prerouting_v6 as f64 / denominator
-                            );
-                            
-                            // Forwarding
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "forwarding_v4",
-                                cpu_frac * total_counts.ip_forward as f64 / denominator
-                            );
-
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "forwarding_v6",
-                                cpu_frac * total_counts.ip6_forward as f64 / denominator
-                            );
-
-                            // Local deliver
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "local_deliver_v4",
-                                cpu_frac * total_counts.ip_local_deliver as f64 / denominator
-                            );
-
-                            let _ = tui.set_val(
-                                num_possible_cpus,
-                                "local_deliver_v6",
-                                cpu_frac * total_counts.ip6_input as f64 / denominator
-                            );
-                            
-                            "rx_softirq"
+                        // Sampling frequency
+                        __bindgen_anon_1: perf_event_open_sys::bindings::perf_event_attr__bindgen_ty_1 {
+                            sample_freq: 1000
                         },
-                        _ => unreachable!()
+
+                        ..Default::default()
                     };
 
-                    let _ = tui.set_val(num_possible_cpus, metric_name, cpu_frac);
+                    // Only count kernel-space events
+                    attrs.set_exclude_user(1);
 
-                    cpu_frac
-                })
-                .sum::<f64>();
+                    // Use frequency instead of period
+                    attrs.set_freq(1);
 
-            let _ = tui.set_val(num_possible_cpus, "total", total_cpu_frac);
-            tui.set_total_power(((delta_energy as f64) * total_cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0));
-        }
+                    (cpuid, attrs)
+                });
+            
+            let mut v = Vec::with_capacity(num_possible_cpus);
+            for (cpuid, mut attrs) in iter {
+                // Open the perf-event
+                let fd = perf_event_open(&mut attrs, -1, cpuid as _, -1, 0);
+                if fd < 0 {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+                
+                // Attach to BPF prog
+                v.push(skel.progs_mut().perf_event_prog().attach_perf_event(fd)?);
+            }
+
+            v
+        };
         
-        tui_runner.refresh();
-        tui_runner.step();
-    }
+        let _sock_sendmsg_entry_link = skel.progs_mut().sock_sendmsg_entry().attach()?;
+        let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
 
-    Ok(())
+        // Init actors
+        let (error_catcher_sender, mut error_catcher_receiver) =
+            unbounded_channel::<anyhow::Error>();
+
+        let metrics_collector_actor_addr = MetricsCollector::new(num_possible_cpus)
+            .start();
+        
+        let _trace_analyzer_actor_addr = TraceAnalyzer::new(
+            MapInfoIter::default()
+                .find_map(|info| {
+                    if info.name == "per_cpu" {
+                        Some(info.id)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(anyhow!("Failed to find id of BPF map \"per_cpu\""))?,
+            skel.maps().stack_traces(),
+            num_possible_cpus,
+            metrics_collector_actor_addr.clone(),
+            error_catcher_sender
+        )?.start();
+
+        // Start HTTP server for frontend
+        let server_future = HttpServer::new(move || App::new()
+            .app_data(web::Data::new(metrics_collector_actor_addr.clone()))
+            .service(ws_get)
+            .service(Files::new("/", "www").index_file("index.html"))
+        )
+            .bind(("127.0.0.1", 8080))?
+            .run();
+
+        tokio::select! {
+            ret = server_future => ret.map_err(|e| e.into()),
+            msg = error_catcher_receiver.recv() => match msg {
+                None => Err(anyhow!("Actors closed unexpectedly")),
+                Some(e) => Err(e)
+            }
+        }
+    })
 }

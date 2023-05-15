@@ -1,2 +1,13 @@
 [workspace]
-members = ["main", "xtask"]
+members = [
+    "main",
+    "web-frontend",
+    "metrics-common",
+    "xtask"
+]
+
+[profile.release.package.web-frontend]
+opt-level = "s"
+
+[profile.release]
+lto = true

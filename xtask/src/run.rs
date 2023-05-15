@@ -18,7 +18,8 @@ pub struct Options {
 
 /// Build the project
 fn build(opts: &Options) -> Result<(), anyhow::Error> {
-    let mut args = vec!["build"];
+    // Build main app
+    let mut args = vec!["build", "--package", "main"];
     if opts.release {
         args.push("--release")
     }
@@ -27,6 +28,22 @@ fn build(opts: &Options) -> Result<(), anyhow::Error> {
         .status()
         .expect("failed to build userspace");
     assert!(status.success());
+
+    // Build wasm web frontend
+    args = vec!["build", "--no-typescript"];
+    if !opts.release {
+        args.push("--dev");
+    }
+    args.extend_from_slice(&["--target", "web", "--out-dir", "../www/pkg", "web-frontend"]);
+    if opts.release {
+        args.push("--no-default-features");
+    }
+    let status = Command::new("wasm-pack")
+        .args(&args)
+        .status()
+        .expect("failed to build web frontend");
+    assert!(status.success());
+    
     Ok(())
 }
 
