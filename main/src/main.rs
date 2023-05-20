@@ -3,7 +3,6 @@ mod bpf {
 }
 #[allow(warnings)]
 mod common;
-// mod tui;
 mod ksyms;
 mod actors;
 
@@ -15,7 +14,7 @@ use actors::trace_analyzer::TraceAnalyzer;
 use anyhow::anyhow;
 use libbpf_rs::{num_possible_cpus, query::MapInfoIter};
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::channel;
 use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient};
 
 #[actix_web::get("/ws/")]
@@ -85,7 +84,7 @@ fn main() -> anyhow::Result<()> {
 
         // Init actors
         let (error_catcher_sender, mut error_catcher_receiver) =
-            unbounded_channel::<anyhow::Error>();
+            channel::<anyhow::Error>(1);
 
         let metrics_collector_actor_addr = MetricsCollector::new(num_possible_cpus)
             .start();

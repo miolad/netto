@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use actix::{Addr, Actor, Context, Handler};
 use metrics_common::{Metric, MetricsWrapper};
-use super::{websocket_client::WebsocketClient, MetricUpdate, PowerUpdate, EncodedUpdate, ClientConnected, ClientDisconnected};
+use super::{websocket_client::WebsocketClient, MetricUpdate, SubmitUpdate, EncodedUpdate, ClientConnected, ClientDisconnected};
 
 pub struct MetricsCollector {
     metrics_root: Metric,
@@ -41,13 +41,14 @@ impl Handler<MetricUpdate> for MetricsCollector {
     }
 }
 
-impl Handler<PowerUpdate> for MetricsCollector {
+impl Handler<SubmitUpdate> for MetricsCollector {
     type Result = ();
 
-    fn handle(&mut self, msg: PowerUpdate, _: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: SubmitUpdate, _: &mut Self::Context) -> Self::Result {
         let json = MetricsWrapper::to_json(
             &self.metrics_root.sub_metrics,
             msg.net_power_w,
+            msg.user_space_overhead,
             self.num_possible_cpus
         );
 

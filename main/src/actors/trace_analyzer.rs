@@ -3,10 +3,10 @@ use actix::{Actor, Context, AsyncContext, Addr};
 use anyhow::anyhow;
 use libbpf_rs::{RingBuffer, Map, RingBufferBuilder, MapFlags};
 use powercap::{IntelRapl, PowerCap};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ}};
 
-use super::{metrics_collector::MetricsCollector, MetricUpdate, PowerUpdate};
+use super::{metrics_collector::MetricsCollector, MetricUpdate, SubmitUpdate};
 
 /// Actor responsible for interacting with BPF via shared maps,
 /// retrieve stack traces from the ring buffer, and analyze them
@@ -32,7 +32,7 @@ pub struct TraceAnalyzer {
     
     /// Interface for sending unrecoverable runtime errors to the
     /// main task, triggering the program termination
-    error_catcher_sender: UnboundedSender<anyhow::Error>,
+    error_catcher_sender: Sender<anyhow::Error>,
 
     // State-keeping fields
 
@@ -60,7 +60,7 @@ impl TraceAnalyzer {
         ringbuf: &Map,
         num_possible_cpus: usize,
         metrics_collector_addr: Addr<MetricsCollector>,
-        error_catcher_sender: UnboundedSender<anyhow::Error>
+        error_catcher_sender: Sender<anyhow::Error>
     ) -> anyhow::Result<Self> {
         let counts = Rc::new(UnsafeCell::new(vec![Counts::default(); num_possible_cpus]));
         let ksyms = KSyms::load()?;
@@ -110,9 +110,10 @@ impl TraceAnalyzer {
     /// Main user-space update loop
     #[inline]
     fn run_interval(&mut self) -> anyhow::Result<()> {
+        let now = Instant::now();
+        
         // Update state
         let delta_time = {
-            let now = Instant::now();
             let dt = now.duration_since(self.prev_update_ts);
             self.prev_update_ts = now;
             dt
@@ -262,8 +263,9 @@ impl TraceAnalyzer {
             })
             .sum::<f64>() / (self.prev_total_times.len() as f64);
 
-        self.metrics_collector_addr.do_send(PowerUpdate {
-            net_power_w: ((delta_energy as f64) * total_cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0)
+        self.metrics_collector_addr.do_send(SubmitUpdate {
+            net_power_w: ((delta_energy as f64) * total_cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0),
+            user_space_overhead: now.elapsed().as_secs_f64() / delta_time.as_secs_f64()
         });
 
         Ok(())
@@ -276,7 +278,7 @@ impl Actor for TraceAnalyzer {
     fn started(&mut self, ctx: &mut Self::Context) {
         ctx.run_interval(Duration::from_millis(500), |act, _| {
             if let Err(e) = act.run_interval() {
-                act.error_catcher_sender.send(e).unwrap();
+                act.error_catcher_sender.blocking_send(e).unwrap();
             }
         });
     }

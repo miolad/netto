@@ -2,6 +2,7 @@
     "files.associations": {
         "bpf_tracing.h": "c",
         "vmlinux.h": "c",
-        "bpf_helpers.h": "c"
+        "bpf_helpers.h": "c",
+        "prog.bpf.h": "c"
     }
 }

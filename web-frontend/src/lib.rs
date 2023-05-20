@@ -182,6 +182,8 @@ pub fn main() -> Result<(), JsValue> {
     let window = web_sys::window().expect("Failed to get a reference to the window object");
     let document = window.document().expect("Failed to get a reference to the document object");
     let table = document.query_selector("table")?.expect("Failed to find main table element in document");
+    let overhead_element = document.query_selector("#overhead")?.expect("Failed to find user-space overhead element in document");
+    let power_element = document.query_selector("#power")?.expect("Failed to find power draw element in document");
 
     let ws = WebSocket::new(&(window.location().origin()?.replace("http", "ws") + "/ws/"))?;
     
@@ -195,6 +197,8 @@ pub fn main() -> Result<(), JsValue> {
                     table.remove_child(&child)?;
                 }
 
+                overhead_element.set_text_content(Some(&format!("{: >6.02}%", metrics.user_space_overhead * 100.0)));
+                power_element.set_text_content(Some(&format!("{: >6.02}W", metrics.net_power_w)));
                 build_table(&document, &table, metrics)?;
             } else {
                 console::log_1(&"Received invalid text message".into());

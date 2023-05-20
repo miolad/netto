@@ -32,6 +32,9 @@ pub struct MetricsWrapper {
     /// Power for the networking stack in W
     pub net_power_w: f64,
 
+    /// Fraction of the CPU time spent by the user-space tool
+    pub user_space_overhead: f64,
+
     /// Number of CPUs
     pub num_possible_cpus: usize
 }
@@ -41,11 +44,13 @@ impl MetricsWrapper {
     pub fn to_json(
         top_level_metrics: &Vec<Metric>,
         net_power_w: f64,
+        user_space_overhead: f64,
         num_possible_cpus: usize
     ) -> String {
         json!({
             "top_level_metrics": top_level_metrics,
             "net_power_w": net_power_w,
+            "user_space_overhead": user_space_overhead,
             "num_possible_cpus": num_possible_cpus
         }).to_string()
     }

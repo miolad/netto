@@ -35,17 +35,17 @@ struct MetricUpdate {
     cpu_frac: f64
 }
 
-/// Used to inform the `MetricsCollector` about the power draw
-/// for the current update cycle.
-/// 
-/// Upon receiving this message, the `MetricsCollector` will
-/// trigger the send on every websocket client.
+/// Used to trigger the `MetricsCollector` to submit the update
+/// to all the clients.
 #[derive(Message)]
 #[rtype("()")]
-struct PowerUpdate {
+struct SubmitUpdate {
     /// Power drawn by the CPU in the networking stack
     /// as measured
-    net_power_w: f64
+    net_power_w: f64,
+
+    /// Fraction of the CPU time spent by the user-space tool
+    user_space_overhead: f64
 }
 
 /// Wrapper around a JSON String to send to websocket clients.
