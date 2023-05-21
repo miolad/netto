@@ -9,6 +9,7 @@ fn main() {
     
     libbpf_cargo::SkeletonBuilder::new()
         .source(SRC)
+        .clang_args("-O3")
         .build_and_generate(out_dir)
         .unwrap();
 
