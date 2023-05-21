@@ -1,29 +1,29 @@
-use std::{time::{Duration, Instant}, cell::UnsafeCell, rc::Rc};
+use std::time::{Duration, Instant};
 use actix::{Actor, Context, AsyncContext, Addr};
 use anyhow::anyhow;
-use libbpf_rs::{RingBuffer, Map, RingBufferBuilder, MapFlags};
+use libbpf_rs::MapFlags;
 use powercap::{IntelRapl, PowerCap};
 use tokio::sync::mpsc::Sender;
-use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ}};
-
+use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ}, bpf::ProgSkel};
+use libc::{mmap, PROT_READ, MAP_SHARED};
 use super::{metrics_collector::MetricsCollector, MetricUpdate, SubmitUpdate};
 
 /// Actor responsible for interacting with BPF via shared maps,
 /// retrieve stack traces from the ring buffer, and analyze them
 /// to provide user-facing performance metrics.
 pub struct TraceAnalyzer {
-    /// Link to the `per_cpu` map in BPF.
-    /// Used to retrieve macro-event stats at each update
-    per_cpu_map: Map,
+    /// libbpf's skeleton
+    skel: ProgSkel<'static>,
 
-    /// High level BPF ring buffer user-space component,
-    /// through which we get all the stack traces captured
-    ringbuf: RingBuffer<'static>,
+    /// Pointer to the mmaped stack traces array map
+    stack_traces_ptr: *const u64,
+
+    /// Vec of one Counts for each CPU
+    counts: Vec<Counts>,
+
+    /// Kernel symbols for processing the traces
+    ksyms: KSyms,
     
-    /// Vec of one `Counts` per cpu shared between the ring buffer
-    /// and the rest of the Actor's lifecycle through an Rc
-    counts: Rc<UnsafeCell<Vec<Counts>>>,
-
     /// Link to the open powercap interface for power queries
     rapl: IntelRapl,
 
@@ -56,48 +56,29 @@ impl TraceAnalyzer {
     /// to be able to acquire it as an owned `libbpf_rs::Map` and
     /// avoid the reference to the lifetime of the main skel.
     pub fn new(
-        per_cpu_map_id: u32,
-        ringbuf: &Map,
+        skel: ProgSkel<'static>,
         num_possible_cpus: usize,
         metrics_collector_addr: Addr<MetricsCollector>,
         error_catcher_sender: Sender<anyhow::Error>
     ) -> anyhow::Result<Self> {
-        let counts = Rc::new(UnsafeCell::new(vec![Counts::default(); num_possible_cpus]));
-        let ksyms = KSyms::load()?;
-
-        let ringbuf = {
-            let counts = Rc::clone(&counts);
-            let mut builder = RingBufferBuilder::new();
-            builder.add(ringbuf, move |data| {
-                let (counts, buf) = unsafe {(
-                    &mut *counts.get(),
-                    std::slice::from_raw_parts(data.as_ptr() as *const u64, data.len() / 8)
-                )};
-
-                let (trace_size, cpuid) = {
-                    let v = buf[0];
-                 
-                    // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
-                    ((v >> 35) as usize, (v & 0xFFFFFFFF) as usize)
-                };
-                counts[cpuid].acc_trace(
-                    &ksyms,
-                    &buf[..trace_size]
-                );
-                
-                0
-            })?;
-            builder.build()
-        }?;
+        let stack_traces_ptr = unsafe { mmap(
+            std::ptr::null_mut(),
+            std::mem::size_of::<u64>() * 128 * 20_000,
+            PROT_READ,
+            MAP_SHARED,
+            skel.maps().stack_traces().fd(),
+            0
+        ) } as *const u64;
 
         let rapl = PowerCap::try_default()
             .map_err(|e| anyhow!("Failed to acquire powercap interface: {e:?}"))?
             .intel_rapl;
 
         Ok(Self {
-            per_cpu_map: Map::from_map_id(per_cpu_map_id)?,
-            ringbuf,
-            counts,
+            skel,
+            stack_traces_ptr,
+            counts: vec![Counts::default(); num_possible_cpus],
+            ksyms: KSyms::load()?,
             rapl,
             metrics_collector_addr,
             error_catcher_sender,
@@ -130,20 +111,52 @@ impl TraceAnalyzer {
         };
         
         // Reset counts to zero
-        unsafe {
-            for counts in &mut *self.counts.get() {
-                *counts = Default::default();
-            }
+        for counts in &mut self.counts {
+            *counts = Counts::default();
         }
 
-        // Drain the ringbuf
-        self.ringbuf.consume()?;
+        // Drain the stack traces array
+        {
+            // Swap buffer slots and get the number of stack traces in the previously active slot
+            let slot_off = self.skel.bss().stack_traces_slot_off as usize;
+            let num_traces_ref;
+            (self.skel.bss().stack_traces_slot_off, num_traces_ref) = if slot_off > 0 {
+                (0,      &mut self.skel.bss().stack_traces_count_slot_1)
+            } else {
+                (10_000, &mut self.skel.bss().stack_traces_count_slot_0)
+            };
+
+            // Make sure to read the count *after* swapping the slots
+            let num_traces = *num_traces_ref;
+            
+            // Count symbols
+            unsafe {
+                for trace_ptr in (0..num_traces as usize).map(|trace_idx| self.stack_traces_ptr.add((slot_off + trace_idx) * 128)) {
+                    // Get the cpuid
+                    let (trace_size, cpuid) = {
+                        let v = trace_ptr.read_volatile();
+
+                        // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
+                        (v >> 35, v & 0xFFFFFFFF)
+                    };
+
+                    self.counts[cpuid as usize].acc_trace(
+                        &self.ksyms,
+                        trace_ptr.add(1),
+                        trace_size as _
+                    );
+                }
+            }
+
+            // Reset the stack traces index for this slot
+            *num_traces_ref = 0;
+        }
 
         // Get a reference to the counts
-        let counts = unsafe { &*self.counts.get() };
+        let counts = &self.counts;
 
         // Lookup in the per-cpu map
-        let stats = self.per_cpu_map
+        let stats = self.skel.maps().per_cpu()
             .lookup_percpu(&0i32.to_le_bytes(), MapFlags::empty())?
             .ok_or(anyhow!("Unexpected None returned for lookup into the \"per_cpu\" map"))?;
         

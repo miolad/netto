@@ -12,7 +12,7 @@ use actix_web::{HttpServer, App, rt::System, HttpRequest, web, HttpResponse};
 use actix_web_actors::ws;
 use actors::trace_analyzer::TraceAnalyzer;
 use anyhow::anyhow;
-use libbpf_rs::{num_possible_cpus, query::MapInfoIter};
+use libbpf_rs::num_possible_cpus;
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
 use tokio::sync::mpsc::channel;
 use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient};
@@ -90,16 +90,7 @@ fn main() -> anyhow::Result<()> {
             .start();
         
         let _trace_analyzer_actor_addr = TraceAnalyzer::new(
-            MapInfoIter::default()
-                .find_map(|info| {
-                    if info.name == "per_cpu" {
-                        Some(info.id)
-                    } else {
-                        None
-                    }
-                })
-                .ok_or(anyhow!("Failed to find id of BPF map \"per_cpu\""))?,
-            skel.maps().stack_traces(),
+            skel,
             num_possible_cpus,
             metrics_collector_actor_addr.clone(),
             error_catcher_sender

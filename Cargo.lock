@@ -1079,6 +1079,7 @@ dependencies = [
  "bindgen",
  "libbpf-cargo",
  "libbpf-rs",
+ "libc",
  "metrics-common",
  "perf-event-open-sys",
  "powercap",
