@@ -45,7 +45,10 @@ struct SubmitUpdate {
     net_power_w: f64,
 
     /// Fraction of the CPU time spent by the user-space tool
-    user_space_overhead: f64
+    user_space_overhead: f64,
+
+    /// Metrics acquired from /proc/stat for validation
+    procfs_metrics: Vec<f64>
 }
 
 /// Wrapper around a JSON String to send to websocket clients.

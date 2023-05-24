@@ -5,7 +5,7 @@ use libbpf_rs::MapFlags;
 use powercap::{IntelRapl, PowerCap};
 use tokio::sync::mpsc::Sender;
 use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ}, bpf::ProgSkel};
-use libc::{mmap, PROT_READ, MAP_SHARED};
+use libc::{mmap, PROT_READ, MAP_SHARED, sysconf, _SC_CLK_TCK};
 use super::{metrics_collector::MetricsCollector, MetricUpdate, SubmitUpdate};
 
 /// Actor responsible for interacting with BPF via shared maps,
@@ -26,6 +26,11 @@ pub struct TraceAnalyzer {
     
     /// Link to the open powercap interface for power queries
     rapl: IntelRapl,
+
+    /// USER_HZ for reading /proc/stat
+    ticks_per_second: f64,
+
+    procfs_metrics_old: Vec<i64>,
 
     /// Addr of the `MetricsCollector` actor
     metrics_collector_addr: Addr<MetricsCollector>,
@@ -74,11 +79,21 @@ impl TraceAnalyzer {
             .map_err(|e| anyhow!("Failed to acquire powercap interface: {e:?}"))?
             .intel_rapl;
 
+        let ticks_per_second = unsafe {
+            let v = sysconf(_SC_CLK_TCK);
+            if v < 0 {
+                anyhow::bail!("Failed to retrieve ticks per second from sysconf");
+            }
+            v as f64
+        };
+
         Ok(Self {
             skel,
             stack_traces_ptr,
             counts: vec![Counts::default(); num_possible_cpus],
             ksyms: KSyms::load()?,
+            ticks_per_second,
+            procfs_metrics_old: vec![0; 10], // TODO: make this agnostic to the actual number of metrics in procfs
             rapl,
             metrics_collector_addr,
             error_catcher_sender,
@@ -276,9 +291,27 @@ impl TraceAnalyzer {
             })
             .sum::<f64>() / (self.prev_total_times.len() as f64);
 
+        // Collect /proc/stat metrics
+        let procfs_metrics = std::fs::read_to_string("/proc/stat")?
+            .lines()
+            .take(1)
+            .flat_map(|s| {
+                s.split_ascii_whitespace()
+                    .skip(1)
+                    .map(|s| s.parse::<i64>().unwrap())
+            })
+            .zip(self.procfs_metrics_old.iter_mut())
+            .map(|(curr, old)| {
+                let delta = curr - *old;
+                *old = curr;
+                (delta as f64) / (self.ticks_per_second * delta_time.as_secs_f64())
+            })
+            .collect::<Vec<_>>();
+
         self.metrics_collector_addr.do_send(SubmitUpdate {
             net_power_w: ((delta_energy as f64) * total_cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0),
-            user_space_overhead: now.elapsed().as_secs_f64() / delta_time.as_secs_f64()
+            user_space_overhead: now.elapsed().as_secs_f64() / delta_time.as_secs_f64(),
+            procfs_metrics
         });
 
         Ok(())

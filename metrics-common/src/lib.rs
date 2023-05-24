@@ -36,7 +36,10 @@ pub struct MetricsWrapper {
     pub user_space_overhead: f64,
 
     /// Number of CPUs
-    pub num_possible_cpus: usize
+    pub num_possible_cpus: usize,
+
+    /// Metrics acquired from /proc/stat for validation
+    pub procfs_metrics: Vec<f64>
 }
 
 impl MetricsWrapper {
@@ -45,13 +48,15 @@ impl MetricsWrapper {
         top_level_metrics: &Vec<Metric>,
         net_power_w: f64,
         user_space_overhead: f64,
-        num_possible_cpus: usize
+        num_possible_cpus: usize,
+        procfs_metrics: Vec<f64>
     ) -> String {
         json!({
             "top_level_metrics": top_level_metrics,
             "net_power_w": net_power_w,
             "user_space_overhead": user_space_overhead,
-            "num_possible_cpus": num_possible_cpus
+            "num_possible_cpus": num_possible_cpus,
+            "procfs_metrics": procfs_metrics
         }).to_string()
     }
 

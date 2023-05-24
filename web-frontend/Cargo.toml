@@ -17,7 +17,8 @@ web-sys = { version = "0.3", features = [
     "MessageEvent",
     "Document",
     "Element",
-    "Node"
+    "Node",
+    "HtmlCollection"
 ]}
 console_error_panic_hook = { version = "0.1", optional = true }
 metrics-common = { path = "../metrics-common" }

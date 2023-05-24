@@ -49,7 +49,8 @@ impl Handler<SubmitUpdate> for MetricsCollector {
             &self.metrics_root.sub_metrics,
             msg.net_power_w,
             msg.user_space_overhead,
-            self.num_possible_cpus
+            self.num_possible_cpus,
+            msg.procfs_metrics
         );
 
         for addr in &self.clients {
