@@ -68,7 +68,7 @@ impl TraceAnalyzer {
     ) -> anyhow::Result<Self> {
         let stack_traces_ptr = unsafe { mmap(
             std::ptr::null_mut(),
-            std::mem::size_of::<u64>() * 128 * 20_000,
+            std::mem::size_of::<u64>() * 128 * 200_000,
             PROT_READ,
             MAP_SHARED,
             skel.maps().stack_traces().fd(),
@@ -138,7 +138,7 @@ impl TraceAnalyzer {
             (self.skel.bss().stack_traces_slot_off, num_traces_ref) = if slot_off > 0 {
                 (0,      &mut self.skel.bss().stack_traces_count_slot_1)
             } else {
-                (10_000, &mut self.skel.bss().stack_traces_count_slot_0)
+                (100_000, &mut self.skel.bss().stack_traces_count_slot_0)
             };
 
             // Make sure to read the count *after* swapping the slots
@@ -273,7 +273,7 @@ impl TraceAnalyzer {
                                     cpuid,
                                     cpu_frac: cpu_frac * counts[cpuid].ip6_input as f64 / denominator
                                 });
-                                
+
                                 "RX softirq"
                             },
                             _ => unreachable!()

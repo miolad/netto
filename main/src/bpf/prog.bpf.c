@@ -54,7 +54,7 @@ struct {
 	__uint(map_flags, BPF_F_MMAPABLE);
 	__uint(key_size, sizeof(u32));
 	__uint(value_size, sizeof(u64)*128);
-    __uint(max_entries, 20000);
+    __uint(max_entries, 200000);
 } stack_traces SEC(".maps");
 
 /**
