@@ -183,11 +183,11 @@ impl TraceAnalyzer {
                 unsafe {
                     // Read the data as unaligned because we do not have any alignment guarantees at this point
                     (cpu_stats.as_ptr() as *const common::per_cpu_data).read_unaligned()
-                }.events
+                }.per_event_total_time
                     .iter()
                     .zip(prev_total_cpu_times.iter_mut())
                     .enumerate()
-                    .map(|(event_idx, (common::per_event_data { total_time, .. }, prev_total_time))| {
+                    .map(|(event_idx, (total_time, prev_total_time))| {
                         let delta_cpu_time = total_time - *prev_total_time;
                         *prev_total_time = *total_time;
                         let cpu_frac = (delta_cpu_time as f64) / (delta_time.as_nanos() as f64);

@@ -11,50 +11,11 @@ pub const event_types_EVENT_MAX: event_types = 3;
 pub type event_types = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct per_event_data {
-    pub prev_ts: u64_,
-    pub total_time: u64_,
-}
-#[test]
-fn bindgen_test_layout_per_event_data() {
-    const UNINIT: ::std::mem::MaybeUninit<per_event_data> = ::std::mem::MaybeUninit::uninit();
-    let ptr = UNINIT.as_ptr();
-    assert_eq!(
-        ::std::mem::size_of::<per_event_data>(),
-        16usize,
-        concat!("Size of: ", stringify!(per_event_data))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<per_event_data>(),
-        8usize,
-        concat!("Alignment of ", stringify!(per_event_data))
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).prev_ts) as usize - ptr as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(per_event_data),
-            "::",
-            stringify!(prev_ts)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).total_time) as usize - ptr as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(per_event_data),
-            "::",
-            stringify!(total_time)
-        )
-    );
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct per_cpu_data {
-    #[doc = " @brief One for each possible event"]
-    pub events: [per_event_data; 3usize],
+    #[doc = " @brief Latest entry timestamp to any event in ns"]
+    pub entry_ts: u64_,
+    #[doc = " @brief Total time in ns registered for each event"]
+    pub per_event_total_time: [u64_; 3usize],
     #[doc = " @brief When non-zero, stack traces by the perf event prog are enabled"]
     pub enable_stack_trace: u8_,
 }
@@ -64,7 +25,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        56usize,
+        40usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(
@@ -73,18 +34,28 @@ fn bindgen_test_layout_per_cpu_data() {
         concat!("Alignment of ", stringify!(per_cpu_data))
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).events) as usize - ptr as usize },
+        unsafe { ::std::ptr::addr_of!((*ptr).entry_ts) as usize - ptr as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),
             "::",
-            stringify!(events)
+            stringify!(entry_ts)
+        )
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).per_event_total_time) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_cpu_data),
+            "::",
+            stringify!(per_event_total_time)
         )
     );
     assert_eq!(
         unsafe { ::std::ptr::addr_of!((*ptr).enable_stack_trace) as usize - ptr as usize },
-        48usize,
+        32usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),
