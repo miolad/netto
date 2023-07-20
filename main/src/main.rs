@@ -110,6 +110,10 @@ fn main() -> anyhow::Result<()> {
             msg = error_catcher_receiver.recv() => match msg {
                 None => Err(anyhow!("Actors closed unexpectedly")),
                 Some(e) => Err(e)
+            },
+            _ = tokio::signal::ctrl_c() => {
+                println!("Exiting...");
+                Ok(())
             }
         }
     })

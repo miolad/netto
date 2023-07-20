@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::{time::{Duration, Instant}, fs::File};
 use actix::{Actor, Context, AsyncContext, Addr};
 use anyhow::anyhow;
 use libbpf_rs::MapFlags;
@@ -52,6 +52,8 @@ pub struct TraceAnalyzer {
     /// Total energy, as reported by RAPL, up to the
     /// previous update cycle
     prev_total_energy: u64,
+
+    traces_output_file: File
 }
 
 impl TraceAnalyzer {
@@ -99,7 +101,8 @@ impl TraceAnalyzer {
             error_catcher_sender,
             prev_update_ts: Instant::now(),
             prev_total_times: vec![vec![0;  event_types_EVENT_MAX as _]; num_possible_cpus],
-            prev_total_energy: 0
+            prev_total_energy: 0,
+            traces_output_file: File::create("traces")?
         })
     }
 
@@ -158,7 +161,8 @@ impl TraceAnalyzer {
                     self.counts[cpuid as usize].acc_trace(
                         &self.ksyms,
                         trace_ptr.add(1),
-                        trace_size as _
+                        trace_size as _,
+                        &mut self.traces_output_file
                     );
                 }
             }
@@ -207,6 +211,13 @@ impl TraceAnalyzer {
                                     cpu_frac: cpu_frac * (counts[cpuid].__napi_poll - counts[cpuid].netif_receive_skb) as f64 / denominator
                                 });
 
+                                // GRO overhead
+                                self.metrics_collector_addr.do_send(MetricUpdate {
+                                    name: "RX softirq/GRO overhead",
+                                    cpuid,
+                                    cpu_frac: cpu_frac * counts[cpuid].napi_gro_receive_overhead as f64 / denominator
+                                });
+
                                 // XDP generic
                                 self.metrics_collector_addr.do_send(MetricUpdate {
                                     name: "RX softirq/XDP generic",
@@ -226,6 +237,13 @@ impl TraceAnalyzer {
                                     name: "RX softirq/NF ingress",
                                     cpuid,
                                     cpu_frac: cpu_frac * counts[cpuid].nf_netdev_ingress as f64 / denominator
+                                });
+
+                                // Conntrack
+                                self.metrics_collector_addr.do_send(MetricUpdate {
+                                    name: "RX softirq/NF conntrack",
+                                    cpuid,
+                                    cpu_frac: cpu_frac * counts[cpuid].nf_conntrack_in as f64 / denominator
                                 });
 
                                 // Bridging
