@@ -1,4 +1,6 @@
-use std::{io::{self, BufReader, BufRead, Write}, fs::File, ops::{Add, AddAssign}, collections::BTreeMap, iter::Sum};
+use std::{io::{self, BufReader, BufRead}, fs::File, ops::{Add, AddAssign}, collections::BTreeMap, iter::Sum};
+#[cfg(feature = "save-traces")]
+use std::io::Write;
 
 /// Helper to load and manage application-defined kernel symbols
 #[derive(Default)]
@@ -174,15 +176,23 @@ impl KSyms {
 impl Counts {
     /// Iterate over the frames in the trace and accumulate the instances of the symbols in this Counts
     #[inline]
-    pub unsafe fn acc_trace(&mut self, ksyms: &KSyms, trace_ptr: *const u64, max_frames: usize, mut output: impl Write) {
+    pub unsafe fn acc_trace(
+        &mut self,
+        ksyms: &KSyms,
+        trace_ptr: *const u64,
+        max_frames: usize,
+        #[cfg(feature = "save-traces")]
+        mut output: impl Write
+    ) {
+        #[cfg(feature = "save-traces")]
+        let mut first_iter = true;
+        
         let mut c = Self::default();
         let mut frame_props = PerFrameProps {
             in_nf_hook: 0,
             ip_rcv_finish: 0
         };
 
-        let mut first_iter = true;
-        
         for frame_idx in 0..max_frames {
             // Load stack frame
             let ip = trace_ptr.add(frame_idx).read_volatile();
@@ -190,8 +200,11 @@ impl Counts {
                 break;
             }
 
-            let _ = write!(output, "{}{ip}", if first_iter { "" } else { "," });
-            first_iter = false;
+            #[cfg(feature = "save-traces")]
+            {
+                let _ = write!(output, "{}{ip}", if first_iter { "" } else { "," });
+                first_iter = false;
+            }
 
             // Check for known symbols
             if let Some((_, KSymsVal { range_end, fun })) = ksyms
@@ -206,6 +219,7 @@ impl Counts {
                 }
         }
 
+        #[cfg(feature = "save-traces")]
         let _ = writeln!(output);
 
         *self += c;

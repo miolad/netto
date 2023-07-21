@@ -21,3 +21,6 @@ metrics-common = { path = "../metrics-common" }
 [build-dependencies]
 libbpf-cargo = "0.20"
 bindgen = "0.64"
+
+[features]
+save-traces = []
