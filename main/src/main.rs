@@ -36,6 +36,7 @@ fn main() -> anyhow::Result<()> {
         // Explicitly attach entry programs last (because the task-local storage can only be allocated by them)
         let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
         let _sock_sendmsg_exit_link = skel.progs_mut().sock_sendmsg_exit().attach()?;
+        let _sock_recvmsg_exit_link = skel.progs_mut().sock_recvmsg_exit().attach()?;
         let _net_rx_softirq_exit_link = skel.progs_mut().net_rx_softirq_exit().attach()?;
 
         // Open and attach a perf-event program for each CPU
@@ -80,6 +81,7 @@ fn main() -> anyhow::Result<()> {
         };
         
         let _sock_sendmsg_entry_link = skel.progs_mut().sock_sendmsg_entry().attach()?;
+        let _sock_recvmsg_entry_link = skel.progs_mut().sock_recvmsg_entry().attach()?;
         let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
 
         // Init actors

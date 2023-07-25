@@ -14,11 +14,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 /**
  * Keeps track of which tasks are currently being tracked,
- * by associating an event bitfield to each task.
- * 
- * To protect against race conditions due to different events
- * being asynchronous, the value should only ever be updated with
- * atomic operations.
+ * by associating an event identified to each task.
  */
 struct {
     __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
@@ -76,18 +72,25 @@ u64 stack_traces_count_slot_0 = 0, stack_traces_count_slot_1 = 0;
  */
 u32 stack_traces_slot_off = 0;
 
+const u64 event_max = EVENT_MAX;
+
+inline void stop_event(u64 per_task_events, struct per_cpu_data* per_cpu_data, u64 now) {
+    if (per_task_events < EVENT_MAX)
+        per_cpu_data->per_event_total_time[per_task_events] += now - per_cpu_data->entry_ts;
+}
+
 SEC("fentry/sock_sendmsg")
 int BPF_PROG(sock_sendmsg_entry) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, /*events,*/ now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns();
 
     if (
-        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), &event_max, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
         per_cpu_data->entry_ts = now;
-        *per_task_events = 1;
+        *per_task_events = EVENT_SOCK_SENDMSG;
     }
     
     return 0;
@@ -97,14 +100,48 @@ SEC("fexit/sock_sendmsg")
 int BPF_PROG(sock_sendmsg_exit) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, /*events,*/ now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns();
 
     if (
-        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL)            &&
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
-        *per_task_events = 0;
+        *per_task_events = EVENT_MAX;
         per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += now - per_cpu_data->entry_ts;
+    }
+    
+    return 0;
+}
+
+SEC("fentry/sock_recvmsg")
+int BPF_PROG(sock_recvmsg_entry) {
+    u32 zero = 0;
+    struct per_cpu_data* per_cpu_data;
+    u64* per_task_events, now = bpf_ktime_get_ns();
+
+    if (
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), &event_max, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
+    ) {
+        per_cpu_data->entry_ts = now;
+        *per_task_events = EVENT_SOCK_RECVMSG;
+    }
+    
+    return 0;
+}
+
+SEC("fexit/sock_recvmsg")
+int BPF_PROG(sock_recvmsg_exit) {
+    u32 zero = 0;
+    struct per_cpu_data* per_cpu_data;
+    u64* per_task_events, now = bpf_ktime_get_ns();
+
+    if (
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
+        likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
+    ) {
+        *per_task_events = EVENT_MAX;
+        per_cpu_data->per_event_total_time[EVENT_SOCK_RECVMSG] += now - per_cpu_data->entry_ts;
     }
     
     return 0;
@@ -112,18 +149,16 @@ int BPF_PROG(sock_sendmsg_exit) {
 
 SEC("tp_btf/softirq_entry")
 int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
-    u32 zero = 0, softirq_ev = vec - 1;
+    u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, /*events,*/ now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns();
 
     if (
-        (vec == NET_RX_SOFTIRQ || vec == NET_TX_SOFTIRQ)                                                                                         &&
-        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
+        (vec == NET_RX_SOFTIRQ || vec == NET_TX_SOFTIRQ)                                                                                               &&
+        likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), &event_max, BPF_LOCAL_STORAGE_GET_F_CREATE)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
-        if (*per_task_events) {
-            per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += now - per_cpu_data->entry_ts;
-        }
+        stop_event(*per_task_events, per_cpu_data, now);
         per_cpu_data->entry_ts = now;
         if (vec == NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 1;
     }
@@ -133,12 +168,12 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
 
 SEC("tp_btf/softirq_exit")
 int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
-    u32 zero = 0, softirq_ev = vec - 1;
+    u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, /*events,*/ now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns();
 
     if (
-        (vec == NET_TX_SOFTIRQ || vec == NET_RX_SOFTIRQ)                                              &&
+        (vec == NET_TX_SOFTIRQ || vec == NET_RX_SOFTIRQ)                                                            &&
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
@@ -151,10 +186,10 @@ int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
         default:
         case NET_RX_SOFTIRQ:
             per_cpu_data->per_event_total_time[EVENT_NET_RX_SOFTIRQ] += now - per_cpu_data->entry_ts;
+            per_cpu_data->enable_stack_trace = 0;
         }
         
-        if (*per_task_events) per_cpu_data->entry_ts = now;
-        if (softirq_ev == EVENT_NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 0;
+        if (*per_task_events != EVENT_MAX) per_cpu_data->entry_ts = now;
     }
 
     return 0;
@@ -171,8 +206,8 @@ int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct tas
     per_cpu_data     = bpf_map_lookup_elem(&per_cpu, &zero);
 
     if (likely(per_cpu_data != NULL)) {
-        if (prev_task_events != NULL && *prev_task_events) per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += now - per_cpu_data->entry_ts;
-        if (next_task_events != NULL && *next_task_events) per_cpu_data->entry_ts = now;
+        if (prev_task_events != NULL) stop_event(*prev_task_events, per_cpu_data, now);
+        if (next_task_events != NULL && *next_task_events != EVENT_MAX) per_cpu_data->entry_ts = now;
     }
     
     return 0;

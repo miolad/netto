@@ -5,9 +5,10 @@ pub type __u64 = ::std::os::raw::c_ulonglong;
 pub type u8_ = __u8;
 pub type u64_ = __u64;
 pub const event_types_EVENT_SOCK_SENDMSG: event_types = 0;
-pub const event_types_EVENT_NET_TX_SOFTIRQ: event_types = 1;
-pub const event_types_EVENT_NET_RX_SOFTIRQ: event_types = 2;
-pub const event_types_EVENT_MAX: event_types = 3;
+pub const event_types_EVENT_SOCK_RECVMSG: event_types = 1;
+pub const event_types_EVENT_NET_TX_SOFTIRQ: event_types = 2;
+pub const event_types_EVENT_NET_RX_SOFTIRQ: event_types = 3;
+pub const event_types_EVENT_MAX: event_types = 4;
 pub type event_types = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -15,7 +16,7 @@ pub struct per_cpu_data {
     #[doc = " @brief Latest entry timestamp to any event in ns"]
     pub entry_ts: u64_,
     #[doc = " @brief Total time in ns registered for each event"]
-    pub per_event_total_time: [u64_; 3usize],
+    pub per_event_total_time: [u64_; 4usize],
     #[doc = " @brief When non-zero, stack traces by the perf event prog are enabled"]
     pub enable_stack_trace: u8_,
 }
@@ -25,7 +26,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        40usize,
+        48usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(
@@ -55,7 +56,7 @@ fn bindgen_test_layout_per_cpu_data() {
     );
     assert_eq!(
         unsafe { ::std::ptr::addr_of!((*ptr).enable_stack_trace) as usize - ptr as usize },
-        32usize,
+        40usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),

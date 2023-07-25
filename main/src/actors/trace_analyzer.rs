@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use libbpf_rs::MapFlags;
 use powercap::{IntelRapl, PowerCap};
 use tokio::sync::mpsc::Sender;
-use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ}, bpf::ProgSkel};
+use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_SOCK_RECVMSG}, bpf::ProgSkel};
 use libc::{mmap, PROT_READ, MAP_SHARED, sysconf, _SC_CLK_TCK};
 use super::{metrics_collector::MetricsCollector, MetricUpdate, SubmitUpdate};
 #[cfg(feature = "save-traces")]
@@ -203,7 +203,8 @@ impl TraceAnalyzer {
 
                         #[allow(non_upper_case_globals)]
                         let metric_name = match event_idx as u32 {
-                            event_types_EVENT_SOCK_SENDMSG => "TX syscalls",
+                            event_types_EVENT_SOCK_SENDMSG   => "TX syscalls",
+                            event_types_EVENT_SOCK_RECVMSG   => "RX syscalls",
                             event_types_EVENT_NET_TX_SOFTIRQ => "TX softirq",
                             event_types_EVENT_NET_RX_SOFTIRQ => {
                                 // Update sub-events

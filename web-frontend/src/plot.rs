@@ -141,6 +141,7 @@ fn draw_bar1<DB: DrawingBackend>(
     
     let colors = [
         (palette::ORANGE_400.into(), BLACK.into()), // TX syscalls
+        (palette::GREEN_800.into(), WHITE.into()),  // RX syscalls
         (CYAN.into(), BLACK.into()),                // TX softirq
         (palette::PURPLE.into(), WHITE.into()),     // RX softirq
         (BLACK.mix(0.2), BLACK.into())              // other
