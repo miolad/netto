@@ -23,4 +23,5 @@ libbpf-cargo = "0.20"
 bindgen = "0.64"
 
 [features]
+#default = ["save-traces"]
 save-traces = []

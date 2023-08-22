@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use libbpf_rs::MapFlags;
 use powercap::{IntelRapl, PowerCap};
 use tokio::sync::mpsc::Sender;
-use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_SOCK_RECVMSG}, bpf::ProgSkel};
+use crate::{ksyms::{Counts, KSyms}, common::{event_types_EVENT_MAX, self, event_types_EVENT_SOCK_SENDMSG, event_types_EVENT_NET_TX_SOFTIRQ, event_types_EVENT_NET_RX_SOFTIRQ, event_types_EVENT_SOCK_RECVMSG, event_types_EVENT_IO_WORKER}, bpf::ProgSkel};
 use libc::{mmap, PROT_READ, MAP_SHARED, sysconf, _SC_CLK_TCK};
 use super::{metrics_collector::MetricsCollector, MetricUpdate, SubmitUpdate};
 #[cfg(feature = "save-traces")]
@@ -206,6 +206,7 @@ impl TraceAnalyzer {
                             event_types_EVENT_SOCK_SENDMSG   => "TX syscalls",
                             event_types_EVENT_SOCK_RECVMSG   => "RX syscalls",
                             event_types_EVENT_NET_TX_SOFTIRQ => "TX softirq",
+                            event_types_EVENT_IO_WORKER      => "IO workers",
                             event_types_EVENT_NET_RX_SOFTIRQ => {
                                 // Update sub-events
                                 let denominator = counts[cpuid].net_rx_action.max(1) as f64;

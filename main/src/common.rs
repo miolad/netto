@@ -8,15 +8,20 @@ pub const event_types_EVENT_SOCK_SENDMSG: event_types = 0;
 pub const event_types_EVENT_SOCK_RECVMSG: event_types = 1;
 pub const event_types_EVENT_NET_TX_SOFTIRQ: event_types = 2;
 pub const event_types_EVENT_NET_RX_SOFTIRQ: event_types = 3;
-pub const event_types_EVENT_MAX: event_types = 4;
+pub const event_types_EVENT_IO_WORKER: event_types = 4;
+pub const event_types_EVENT_MAX: event_types = 5;
 pub type event_types = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct per_cpu_data {
     #[doc = " @brief Latest entry timestamp to any event in ns"]
     pub entry_ts: u64_,
+    #[doc = " @brief Latest scheduler switch timestamp"]
+    pub sched_switch_ts: u64_,
+    #[doc = " @brief Total CPU time accounted to various events since the last scheduler switch"]
+    pub sched_switch_accounted_time: u64_,
     #[doc = " @brief Total time in ns registered for each event"]
-    pub per_event_total_time: [u64_; 4usize],
+    pub per_event_total_time: [u64_; 5usize],
     #[doc = " @brief When non-zero, stack traces by the perf event prog are enabled"]
     pub enable_stack_trace: u8_,
 }
@@ -26,7 +31,7 @@ fn bindgen_test_layout_per_cpu_data() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<per_cpu_data>(),
-        48usize,
+        72usize,
         concat!("Size of: ", stringify!(per_cpu_data))
     );
     assert_eq!(
@@ -45,8 +50,28 @@ fn bindgen_test_layout_per_cpu_data() {
         )
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).per_event_total_time) as usize - ptr as usize },
+        unsafe { ::std::ptr::addr_of!((*ptr).sched_switch_ts) as usize - ptr as usize },
         8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_cpu_data),
+            "::",
+            stringify!(sched_switch_ts)
+        )
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).sched_switch_accounted_time) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(per_cpu_data),
+            "::",
+            stringify!(sched_switch_accounted_time)
+        )
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).per_event_total_time) as usize - ptr as usize },
+        24usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),
@@ -56,7 +81,7 @@ fn bindgen_test_layout_per_cpu_data() {
     );
     assert_eq!(
         unsafe { ::std::ptr::addr_of!((*ptr).enable_stack_trace) as usize - ptr as usize },
-        40usize,
+        64usize,
         concat!(
             "Offset of field: ",
             stringify!(per_cpu_data),

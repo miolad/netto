@@ -75,7 +75,7 @@ impl KSyms {
                     "__napi_poll" => Option::<SymbolFun>::Some(Box::new(
                         |cnt, _| Some(&mut cnt.__napi_poll)
                     )),
-                    "netif_receive_skb" | "netif_receive_skb_core" | "netif_receive_skb_list_internal" => Option::<SymbolFun>::Some(Box::new(
+                    "netif_receive_skb" | "netif_receive_skb_core" | "netif_receive_skb_list_internal" | "__netif_receive_skb" => Option::<SymbolFun>::Some(Box::new(
                         |cnt, PerFrameProps { in_nf_hook, .. }| {
                             cnt.nf_netdev_ingress = cnt.nf_netdev_ingress.max(std::mem::take(in_nf_hook));
                             Some(&mut cnt.netif_receive_skb)

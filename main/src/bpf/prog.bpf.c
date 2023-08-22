@@ -75,8 +75,14 @@ u32 stack_traces_slot_off = 0;
 const u64 event_max = EVENT_MAX;
 
 inline void stop_event(u64 per_task_events, struct per_cpu_data* per_cpu_data, u64 now) {
-    if (per_task_events < EVENT_MAX)
-        per_cpu_data->per_event_total_time[per_task_events] += now - per_cpu_data->entry_ts;
+    u64 t;
+    
+    if (per_task_events < EVENT_MAX) {
+        t = now - per_cpu_data->entry_ts;
+        
+        per_cpu_data->per_event_total_time[per_task_events] += t;
+        per_cpu_data->sched_switch_accounted_time += t;
+    }
 }
 
 SEC("fentry/sock_sendmsg")
@@ -100,14 +106,17 @@ SEC("fexit/sock_sendmsg")
 int BPF_PROG(sock_sendmsg_exit) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns(), t;
 
     if (
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
+        t = now - per_cpu_data->entry_ts;
+        
         *per_task_events = EVENT_MAX;
-        per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += now - per_cpu_data->entry_ts;
+        per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += t;
+        per_cpu_data->sched_switch_accounted_time += t;
     }
     
     return 0;
@@ -134,14 +143,17 @@ SEC("fexit/sock_recvmsg")
 int BPF_PROG(sock_recvmsg_exit) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns(), t;
 
     if (
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
+        t = now - per_cpu_data->entry_ts;
+        
         *per_task_events = EVENT_MAX;
-        per_cpu_data->per_event_total_time[EVENT_SOCK_RECVMSG] += now - per_cpu_data->entry_ts;
+        per_cpu_data->per_event_total_time[EVENT_SOCK_RECVMSG] += t;
+        per_cpu_data->sched_switch_accounted_time += t;
     }
     
     return 0;
@@ -170,25 +182,28 @@ SEC("tp_btf/softirq_exit")
 int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, now = bpf_ktime_get_ns();
+    u64* per_task_events, now = bpf_ktime_get_ns(), t;
 
     if (
         (vec == NET_TX_SOFTIRQ || vec == NET_RX_SOFTIRQ)                                                            &&
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
+        t = now - per_cpu_data->entry_ts;
+        
         // Convoluted expression makes the verifier happy
         switch (vec) {
         case NET_TX_SOFTIRQ:
-            per_cpu_data->per_event_total_time[EVENT_NET_TX_SOFTIRQ] += now - per_cpu_data->entry_ts;
+            per_cpu_data->per_event_total_time[EVENT_NET_TX_SOFTIRQ] += t;
             break;
 
         default:
         case NET_RX_SOFTIRQ:
-            per_cpu_data->per_event_total_time[EVENT_NET_RX_SOFTIRQ] += now - per_cpu_data->entry_ts;
+            per_cpu_data->per_event_total_time[EVENT_NET_RX_SOFTIRQ] += t;
             per_cpu_data->enable_stack_trace = 0;
         }
-        
+
+        per_cpu_data->sched_switch_accounted_time += t;
         if (*per_task_events != EVENT_MAX) per_cpu_data->entry_ts = now;
     }
 
@@ -208,6 +223,11 @@ int BPF_PROG(tp_sched_switch, bool preempt, struct task_struct* prev, struct tas
     if (likely(per_cpu_data != NULL)) {
         if (prev_task_events != NULL) stop_event(*prev_task_events, per_cpu_data, now);
         if (next_task_events != NULL && *next_task_events != EVENT_MAX) per_cpu_data->entry_ts = now;
+
+        if (prev->flags & 0x10 /* PF_IO_WORKER */)
+            per_cpu_data->per_event_total_time[EVENT_IO_WORKER] += now - per_cpu_data->sched_switch_ts - per_cpu_data->sched_switch_accounted_time;
+        per_cpu_data->sched_switch_ts = now;
+        per_cpu_data->sched_switch_accounted_time = 0;
     }
     
     return 0;
