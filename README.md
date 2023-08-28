@@ -27,7 +27,7 @@ Compile and run with:
     $ ./netto -h
     eBPF-based network diagnosis tool for Linux
 
-    Usage: main [OPTIONS]
+    Usage: netto [OPTIONS]
 
     Options:
     -f, --frequency <FREQUENCY>  Perf-event's sampling frequency for the NET_RX_SOFTIRQ cost breakdown [default: 1000]

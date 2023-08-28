@@ -72,7 +72,13 @@ pub fn main() -> Result<(), JsValue> {
 
                 // Update isolated info
                 overhead_element.set_text_content(Some(&format!("{: >6.02}%", metrics.user_space_overhead * 100.0)));
-                power_element.set_text_content(Some(&format!("{: >6.02}W", metrics.net_power_w)));
+                power_element.set_text_content(Some(&
+                    if let Some(power) = metrics.net_power_w {
+                        format!("{: >6.02}W", power)
+                    } else {
+                        "  N/A".to_string()
+                    }
+                ));
 
                 // Update plot
                 {

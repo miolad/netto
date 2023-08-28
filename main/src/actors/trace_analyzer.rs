@@ -27,7 +27,7 @@ pub struct TraceAnalyzer {
     ksyms: KSyms,
     
     /// Link to the open powercap interface for power queries
-    rapl: IntelRapl,
+    rapl: Option<IntelRapl>,
 
     /// USER_HZ for reading /proc/stat
     ticks_per_second: f64,
@@ -81,8 +81,8 @@ impl TraceAnalyzer {
         ) } as *const u64;
 
         let rapl = PowerCap::try_default()
-            .map_err(|e| anyhow!("Failed to acquire powercap interface: {e:?}"))?
-            .intel_rapl;
+            .map(|rapl| rapl.intel_rapl)
+            .ok();
 
         let ticks_per_second = unsafe {
             let v = sysconf(_SC_CLK_TCK);
@@ -121,8 +121,8 @@ impl TraceAnalyzer {
             self.prev_update_ts = now;
             dt
         };
-        let delta_energy = {
-            let current_total_energy = self.rapl
+        let delta_energy = self.rapl.as_ref().map(|rapl| {
+            let current_total_energy = rapl
                 .sockets
                 .values()
                 .flat_map(|socket| socket.energy())
@@ -130,7 +130,7 @@ impl TraceAnalyzer {
             let delta_energy = current_total_energy - self.prev_total_energy;
             self.prev_total_energy = current_total_energy;
             delta_energy
-        };
+        });
         
         // Reset counts to zero
         for counts in &mut self.counts {
@@ -334,7 +334,7 @@ impl TraceAnalyzer {
             .collect::<Vec<_>>();
 
         self.metrics_collector_addr.do_send(SubmitUpdate {
-            net_power_w: ((delta_energy as f64) * total_cpu_frac) / (delta_time.as_secs_f64() * 1_000_000.0),
+            net_power_w: delta_energy.map(|e| (e as f64) * total_cpu_frac / (delta_time.as_secs_f64() * 1_000_000.0)),
             user_space_overhead: now.elapsed().as_secs_f64() / delta_time.as_secs_f64(),
             procfs_metrics
         });

@@ -29,8 +29,9 @@ pub struct MetricsWrapper {
     /// Top-level metrics
     pub top_level_metrics: Vec<Metric>,
 
-    /// Power for the networking stack in W
-    pub net_power_w: f64,
+    /// Power for the networking stack in W.
+    /// It's None if the RAPL interface isn't available.
+    pub net_power_w: Option<f64>,
 
     /// Fraction of the CPU time spent by the user-space tool
     pub user_space_overhead: f64,
@@ -46,7 +47,7 @@ impl MetricsWrapper {
     /// Serialize this wrapper into a JSON string from the raw parts
     pub fn to_json(
         top_level_metrics: &Vec<Metric>,
-        net_power_w: f64,
+        net_power_w: Option<f64>,
         user_space_overhead: f64,
         num_possible_cpus: usize,
         procfs_metrics: Vec<f64>

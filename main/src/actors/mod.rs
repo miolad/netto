@@ -41,8 +41,9 @@ struct MetricUpdate {
 #[rtype("()")]
 struct SubmitUpdate {
     /// Power drawn by the CPU in the networking stack
-    /// as measured
-    net_power_w: f64,
+    /// as measured.
+    /// It's None if the RAPL interface isn't available.
+    net_power_w: Option<f64>,
 
     /// Fraction of the CPU time spent by the user-space tool
     user_space_overhead: f64,
