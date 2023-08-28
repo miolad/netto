@@ -24,6 +24,19 @@ Compile and run with:
 
 ## Usage
 
+    $ ./netto -h
+    eBPF-based network diagnosis tool for Linux
+
+    Usage: main [OPTIONS]
+
+    Options:
+    -f, --frequency <FREQUENCY>  Perf-event's sampling frequency for the NET_RX_SOFTIRQ cost breakdown [default: 1000]
+    -a, --address <ADDRESS>      Bind address for the web frontend [default: 0.0.0.0]
+    -p, --port <PORT>            Bind port for the web frontend [default: 8080]
+    -h, --help                   Print help
+    -V, --version                Print version
+
+
 Netto exposes the real time results as a Wasm-powered web page accessible on `http://localhost:8080`
 
 ## Repository structure

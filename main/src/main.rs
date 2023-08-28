@@ -6,16 +6,38 @@ mod common;
 mod ksyms;
 mod actors;
 
+use std::net::IpAddr;
+
 use actix::{Actor, Addr};
 use actix_files::Files;
 use actix_web::{HttpServer, App, rt::System, HttpRequest, web, HttpResponse};
 use actix_web_actors::ws;
 use actors::trace_analyzer::TraceAnalyzer;
 use anyhow::anyhow;
+use clap::Parser;
 use libbpf_rs::num_possible_cpus;
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
 use tokio::sync::mpsc::channel;
 use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient};
+
+#[derive(Parser)]
+#[command(name = "netto")]
+#[command(author = "Davide Miola <davide.miola99@gmail.com>")]
+#[command(about = "eBPF-based network diagnosis tool for Linux")]
+#[command(version)]
+struct Cli {
+    /// Perf-event's sampling frequency for the NET_RX_SOFTIRQ cost breakdown
+    #[arg(short, long, default_value_t = 1000)]
+    frequency: u64,
+
+    /// Bind address for the web frontend
+    #[arg(short, long, default_value = "0.0.0.0")]
+    address: IpAddr,
+
+    /// Bind port for the web frontend
+    #[arg(short, long, default_value_t = 8080)]
+    port: u16
+}
 
 #[actix_web::get("/ws/")]
 async fn ws_get(
@@ -27,6 +49,8 @@ async fn ws_get(
 }
 
 fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    
     System::new().block_on(async {
         // Init BPF: open the libbpf skeleton, load the progs and attach them
         let open_skel = bpf::ProgSkelBuilder::default().open()?;
@@ -50,7 +74,7 @@ fn main() -> anyhow::Result<()> {
 
                         // Sampling frequency
                         __bindgen_anon_1: perf_event_open_sys::bindings::perf_event_attr__bindgen_ty_1 {
-                            sample_freq: 1000
+                            sample_freq: cli.frequency
                         },
 
                         ..Default::default()
@@ -104,7 +128,7 @@ fn main() -> anyhow::Result<()> {
             .service(ws_get)
             .service(Files::new("/", "www").index_file("index.html"))
         )
-            .bind(("127.0.0.1", 8080))?
+            .bind((cli.address, cli.port))?
             .run();
 
         tokio::select! {
