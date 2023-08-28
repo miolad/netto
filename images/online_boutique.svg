@@ -1,0 +1,82 @@
+<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="800" height="600" opacity="1" fill="#FFFFFF" stroke="none"></rect>
+<rect x="76" y="417" width="104" height="123" opacity="0.6" fill="#FF0000" stroke="none"></rect>
+<text x="128" y="479" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#FFFFFF">
+kernel
+</text>
+<rect x="76" y="215" width="104" height="202" opacity="0.6" fill="#00FF00" stroke="none"></rect>
+<text x="128" y="316" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+user
+</text>
+<rect x="76" y="60" width="104" height="155" opacity="0.2" fill="#000000" stroke="none"></rect>
+<text x="128" y="138" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+idle
+</text>
+<text x="68" y="540" dy="0.5ex" text-anchor="end" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+0%
+</text>
+<text x="68" y="60" dy="0.5ex" text-anchor="end" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+100%
+</text>
+<rect x="348" y="518" width="104" height="22" opacity="1" fill="#FFA726" stroke="none"></rect>
+<text x="400" y="529" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+TX syscalls
+</text>
+<rect x="348" y="511" width="104" height="7" opacity="1" fill="#2E7D32" stroke="none"></rect>
+<rect x="348" y="511" width="104" height="0" opacity="1" fill="#00FFFF" stroke="none"></rect>
+<rect x="348" y="429" width="104" height="82" opacity="1" fill="#9C27B0" stroke="none"></rect>
+<text x="400" y="470" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#FFFFFF">
+RX softirq
+</text>
+<rect x="348" y="328" width="104" height="101" opacity="1" fill="#FF4081" stroke="none"></rect>
+<text x="400" y="379" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#FFFFFF">
+IO workers
+</text>
+<rect x="348" y="60" width="104" height="268" opacity="0.2" fill="#000000" stroke="none"></rect>
+<text x="400" y="194" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+other
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="180,417 348,60 "></polyline>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="180,540 348,540 "></polyline>
+<rect x="612" y="517" width="104" height="23" opacity="1" fill="#64DD17" stroke="none"></rect>
+<text x="664" y="529" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+Driver poll
+</text>
+<rect x="612" y="508" width="104" height="9" opacity="1" fill="#536DFE" stroke="none"></rect>
+<rect x="612" y="508" width="104" height="0" opacity="1" fill="#FF80AB" stroke="none"></rect>
+<rect x="612" y="508" width="104" height="0" opacity="1" fill="#607D8B" stroke="none"></rect>
+<rect x="612" y="491" width="104" height="17" opacity="1" fill="#FFC107" stroke="none"></rect>
+<text x="664" y="500" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+NF ingress
+</text>
+<rect x="612" y="444" width="104" height="47" opacity="1" fill="#A5D6A7" stroke="none"></rect>
+<text x="664" y="468" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+NF conntrack
+</text>
+<rect x="612" y="428" width="104" height="16" opacity="1" fill="#673AB7" stroke="none"></rect>
+<text x="664" y="436" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#FFFFFF">
+Bridging
+</text>
+<rect x="612" y="393" width="104" height="35" opacity="1" fill="#BCAAA4" stroke="none"></rect>
+<text x="664" y="410" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+NF prerouting/v4
+</text>
+<rect x="612" y="393" width="104" height="0" opacity="1" fill="#5D4037" stroke="none"></rect>
+<rect x="612" y="202" width="104" height="191" opacity="1" fill="#90CAF9" stroke="none"></rect>
+<text x="664" y="297" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+Forwarding/v4
+</text>
+<rect x="612" y="202" width="104" height="0" opacity="1" fill="#2962FF" stroke="none"></rect>
+<rect x="612" y="110" width="104" height="92" opacity="1" fill="#EF9A9A" stroke="none"></rect>
+<text x="664" y="156" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+Local delivery/v4
+</text>
+<rect x="612" y="110" width="104" height="0" opacity="1" fill="#FF1744" stroke="none"></rect>
+<rect x="612" y="60" width="104" height="50" opacity="0.2" fill="#000000" stroke="none"></rect>
+<text x="664" y="85" dy="0.5ex" text-anchor="middle" font-family="monospace" font-size="12.903225806451614" opacity="1" fill="#000000">
+other
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="452,429 612,60 "></polyline>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="452,511 612,540 "></polyline>
+</svg>
+
