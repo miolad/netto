@@ -14,6 +14,9 @@ use std::fs::File;
 /// retrieve stack traces from the ring buffer, and analyze them
 /// to provide user-facing performance metrics.
 pub struct TraceAnalyzer {
+    /// User-space invocation period in ms
+    run_interval_ms: u64,
+
     /// libbpf's skeleton
     skel: ProgSkel<'static>,
 
@@ -66,6 +69,7 @@ impl TraceAnalyzer {
     /// to be able to acquire it as an owned `libbpf_rs::Map` and
     /// avoid the reference to the lifetime of the main skel.
     pub fn new(
+        run_interval_ms: u64,
         skel: ProgSkel<'static>,
         num_possible_cpus: usize,
         metrics_collector_addr: Addr<MetricsCollector>,
@@ -93,6 +97,7 @@ impl TraceAnalyzer {
         };
 
         Ok(Self {
+            run_interval_ms,
             skel,
             stack_traces_ptr,
             counts: vec![Counts::default(); num_possible_cpus],
@@ -347,7 +352,7 @@ impl Actor for TraceAnalyzer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.run_interval(Duration::from_millis(500), |act, _| {
+        ctx.run_interval(Duration::from_millis(self.run_interval_ms), |act, _| {
             if let Err(e) = act.run_interval() {
                 act.error_catcher_sender.blocking_send(e).unwrap();
             }

@@ -26,7 +26,7 @@ use crate::actors::{metrics_collector::MetricsCollector, websocket_client::Webso
 #[command(about = "eBPF-based network diagnosis tool for Linux")]
 #[command(version)]
 struct Cli {
-    /// Perf-event's sampling frequency for the NET_RX_SOFTIRQ cost breakdown
+    /// Perf-event's sampling frequency in Hz for the NET_RX_SOFTIRQ cost breakdown
     #[arg(short, long, default_value_t = 1000)]
     frequency: u64,
 
@@ -36,7 +36,11 @@ struct Cli {
 
     /// Bind port for the web frontend
     #[arg(short, long, default_value_t = 8080)]
-    port: u16
+    port: u16,
+
+    /// User-space controller update period in ms
+    #[arg(long, default_value_t = 500)]
+    user_frequency: u64
 }
 
 #[actix_web::get("/ws/")]
@@ -116,6 +120,7 @@ fn main() -> anyhow::Result<()> {
             .start();
         
         let _trace_analyzer_actor_addr = TraceAnalyzer::new(
+            cli.user_frequency,
             skel,
             num_possible_cpus,
             metrics_collector_actor_addr.clone(),
