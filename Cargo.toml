@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "main",
+    "netto",
     "web-frontend",
     "metrics-common",
     "xtask"

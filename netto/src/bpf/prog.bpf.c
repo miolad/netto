@@ -50,7 +50,7 @@ struct {
 	__uint(map_flags, BPF_F_MMAPABLE);
 	__uint(key_size, sizeof(u32));
 	__uint(value_size, sizeof(u64)*128);
-    __uint(max_entries, 200000);
+    __uint(max_entries, 200000); // TODO: make this dynamically chosen based on runtime parameters like number of CPUs and configured sampling and controller frequency
 } stack_traces SEC(".maps");
 
 /**

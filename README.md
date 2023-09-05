@@ -14,7 +14,7 @@ _Netto is an eBPF-based network monitoring tool for Linux that measures the CPU 
 
 ## Compilation
 
-To compile the tool you'll need:
+To build _Netto_ you'll need:
  - Latest Rust toolchain (stable or nightly)
  - [wasm_pack](https://rustwasm.github.io/wasm-pack/installer/) (for the web frontend)
 
@@ -44,8 +44,8 @@ Netto exposes the real time results as a Wasm-powered web page accessible on `ht
 | Folder | Contents |
 | - | - |
 | `images` | Images used on this `README` |
-| `main` | Main Rust binary crate |
-| `main/src/bpf` | BPF-C programs |
+| `netto` | Main Rust binary crate |
+| `netto/src/bpf` | BPF-C programs |
 | `metrics-common` | Bridge Rust library crate for `main` and `web-frontend` |
 | `web-frontend` | Rust WebAssembly frontend |
 | `www` | Static files for the web frontend |
