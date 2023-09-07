@@ -1,7 +1,7 @@
 mod plot;
 mod table;
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use metrics_common::MetricsWrapper;
 use plot::update_plot;
@@ -20,12 +20,12 @@ pub fn main() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     let window = web_sys::window().expect("Failed to get a reference to the window object");
-    let document = Arc::new(window.document().expect("Failed to get a reference to the document object"));
-    let table = Arc::new(document.query_selector("#metrics-table")?.expect("Failed to find main table element in document"));
-    let overhead_element = Arc::new(document.query_selector("#overhead")?.expect("Failed to find user-space overhead element in document"));
-    let power_element = Arc::new(document.query_selector("#power")?.expect("Failed to find power draw element in document"));
-    let procfs_table = Arc::new(document.query_selector("#procfs-table")?.expect("Failed to find procfs table in document"));
-    let svg_container = Arc::new(document.query_selector("#svg-container")?.expect("Failed to find svg container in document"));
+    let document = Rc::new(window.document().expect("Failed to get a reference to the document object"));
+    let table = Rc::new(document.query_selector("#metrics-table")?.expect("Failed to find main table element in document"));
+    let overhead_element = Rc::new(document.query_selector("#overhead")?.expect("Failed to find user-space overhead element in document"));
+    let power_element = Rc::new(document.query_selector("#power")?.expect("Failed to find power draw element in document"));
+    let procfs_table = Rc::new(document.query_selector("#procfs-table")?.expect("Failed to find procfs table in document"));
+    let svg_container = Rc::new(document.query_selector("#svg-container")?.expect("Failed to find svg container in document"));
 
     let ws = WebSocket::new(&(window.location().origin()?.replace("http", "ws") + "/ws/"))?;
 
@@ -48,12 +48,12 @@ pub fn main() -> Result<(), JsValue> {
         if let Ok(blob) = e.data().dyn_into::<web_sys::Blob>() {
             let blob: gloo_file::Blob = blob.into();
 
-            let document = Arc::clone(&document);
-            let table = Arc::clone(&table);
-            let overhead_element = Arc::clone(&overhead_element);
-            let power_element = Arc::clone(&power_element);
-            let procfs_table = Arc::clone(&procfs_table);
-            let svg_container = Arc::clone(&svg_container);
+            let document = Rc::clone(&document);
+            let table = Rc::clone(&table);
+            let overhead_element = Rc::clone(&overhead_element);
+            let power_element = Rc::clone(&power_element);
+            let procfs_table = Rc::clone(&procfs_table);
+            let svg_container = Rc::clone(&svg_container);
             
             let fr = gloo_file::callbacks::read_as_bytes(&blob, move |res| {
                 if let Ok(bytes) = res {

@@ -23,6 +23,9 @@ pub struct TraceAnalyzer {
     /// Pointer to the mmaped stack traces array map
     stack_traces_ptr: *const u64,
 
+    /// Half size of the `stack_traces` eBPF map in number of entries
+    stack_traces_slot_size: u32,
+
     /// Vec of one Counts for each CPU
     counts: Vec<Counts>,
 
@@ -72,12 +75,13 @@ impl TraceAnalyzer {
         run_interval_ms: u64,
         skel: ProgSkel<'static>,
         num_possible_cpus: usize,
+        stack_traces_max_entries: u32,
         metrics_collector_addr: Addr<MetricsCollector>,
         error_catcher_sender: Sender<anyhow::Error>
     ) -> anyhow::Result<Self> {
         let stack_traces_ptr = unsafe { mmap(
             std::ptr::null_mut(),
-            std::mem::size_of::<u64>() * 128 * 200_000,
+            std::mem::size_of::<u64>() * 128 * stack_traces_max_entries as usize,
             PROT_READ,
             MAP_SHARED,
             skel.maps().stack_traces().fd(),
@@ -100,6 +104,7 @@ impl TraceAnalyzer {
             run_interval_ms,
             skel,
             stack_traces_ptr,
+            stack_traces_slot_size: stack_traces_max_entries / 2,
             counts: vec![Counts::default(); num_possible_cpus],
             ksyms: KSyms::load()?,
             ticks_per_second,
@@ -148,9 +153,9 @@ impl TraceAnalyzer {
             let slot_off = self.skel.bss().stack_traces_slot_off as usize;
             let num_traces_ref;
             (self.skel.bss().stack_traces_slot_off, num_traces_ref) = if slot_off > 0 {
-                (0,      &mut self.skel.bss().stack_traces_count_slot_1)
+                (0                          , &mut self.skel.bss().stack_traces_count_slot_1)
             } else {
-                (100_000, &mut self.skel.bss().stack_traces_count_slot_0)
+                (self.stack_traces_slot_size, &mut self.skel.bss().stack_traces_count_slot_0)
             };
 
             // Make sure to read the count *after* swapping the slots

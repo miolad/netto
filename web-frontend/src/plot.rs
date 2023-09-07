@@ -153,7 +153,7 @@ fn draw_bar1<DB: DrawingBackend>(
         .chain(std::iter::once(
             ("other", (kernel_adjusted - networking) / kernel_adjusted)
         ))
-        .zip(colors.into_iter())
+        .zip(colors)
         .map(|((name, fraction), (color, text_color))| BoxSpec {
             name, fraction: fraction as _, color, text_color
         });
@@ -235,7 +235,7 @@ fn draw_bar2<DB: DrawingBackend>(
         .chain(std::iter::once(
             ("other".to_string(), other)
         ))
-        .zip(colors.into_iter())
+        .zip(colors)
         .map(|((name, fraction), (color, text_color))| BoxSpec {
             name, fraction: (fraction / total) as _, color, text_color
         });

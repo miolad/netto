@@ -61,10 +61,20 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     
     System::new().block_on(async {
-        // Init BPF: open the libbpf skeleton, load the progs and attach them
-        let open_skel = bpf::ProgSkelBuilder::default().open()?;
-        let mut skel = open_skel.load()?;
         let num_possible_cpus = num_possible_cpus()?;
+        
+        // Init BPF: open the libbpf skeleton, load the progs and attach them
+        let mut open_skel = bpf::ProgSkelBuilder::default().open()?;
+
+        let stack_traces_max_entries = (cli.frequency as f64 *
+            num_possible_cpus as f64 *
+            (cli.user_period as f64 / 1000.0) *
+            1.1 // Add 10% margin to account for controller scheduling irregularities
+        ).ceil() as u32 * 2;
+        println!("Allocated memory for stack traces BPF map: {}B", stack_traces_max_entries * 128 * 8);
+        open_skel.maps_mut().stack_traces().set_max_entries(stack_traces_max_entries)?;
+
+        let mut skel = open_skel.load()?;
 
         // Explicitly attach entry programs last (because the task-local storage can only be allocated by them)
         let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
@@ -134,6 +144,7 @@ fn main() -> anyhow::Result<()> {
             cli.user_period,
             skel,
             num_possible_cpus,
+            stack_traces_max_entries,
             metrics_collector_actor_addr.clone(),
             error_catcher_sender
         )?.start();

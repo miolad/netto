@@ -50,7 +50,7 @@ struct {
 	__uint(map_flags, BPF_F_MMAPABLE);
 	__uint(key_size, sizeof(u32));
 	__uint(value_size, sizeof(u64)*128);
-    __uint(max_entries, 200000); // TODO: make this dynamically chosen based on runtime parameters like number of CPUs and configured sampling and controller frequency
+    __uint(max_entries, 1); // This is set at runtime based on configuration parameters
 } stack_traces SEC(".maps");
 
 /**
@@ -66,7 +66,7 @@ u64 stack_traces_count_slot_0 = 0, stack_traces_count_slot_1 = 0;
  * Slot selector into the `stack_traces` map.
  * 
  * The value represents the current offset to be applied to
- * the buffer, and will therefore only ever be 0 or 10000.
+ * the buffer, and will therefore only ever be 0 or `stack_traces.max_entries/2`.
  * 
  * A non-zero value means select slot1, otherwise use slot0.
  */
