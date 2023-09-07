@@ -3,14 +3,13 @@
 //! these metrics.
 
 use serde::{Serialize, Deserialize};
-use serde_json::json;
 
 /// Represents a single metric, possibly with
 /// a list of submetrics.
 /// 
 /// A metric is indexed by its hierarchical name,
 /// for example: "RX Softirq/Bridging".
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Metric {
     /// Name of this metric
     pub name: String,
@@ -44,25 +43,27 @@ pub struct MetricsWrapper {
 }
 
 impl MetricsWrapper {
-    /// Serialize this wrapper into a JSON string from the raw parts
-    pub fn to_json(
-        top_level_metrics: &Vec<Metric>,
+    /// Serialize this wrapper into a MessagePack buffer from the raw parts
+    pub fn to_mp(
+        top_level_metrics: &[Metric],
         net_power_w: Option<f64>,
         user_space_overhead: f64,
         num_possible_cpus: usize,
         procfs_metrics: Vec<f64>
-    ) -> String {
-        json!({
-            "top_level_metrics": top_level_metrics,
-            "net_power_w": net_power_w,
-            "user_space_overhead": user_space_overhead,
-            "num_possible_cpus": num_possible_cpus,
-            "procfs_metrics": procfs_metrics
-        }).to_string()
+    ) -> Vec<u8> {
+        let wrapper = Self {
+            top_level_metrics: top_level_metrics.to_vec(),
+            net_power_w,
+            user_space_overhead,
+            num_possible_cpus,
+            procfs_metrics
+        };
+
+        rmp_serde::to_vec(&wrapper).unwrap()
     }
 
-    /// Deserialize from a JSON string
-    pub fn from_json(json: &str) -> serde_json::Result<Self> {
-        serde_json::from_str(json)
+    /// Deserialize from a MessagePack slice
+    pub fn from_mp(mp: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
+        rmp_serde::from_slice(mp)
     }
 }

@@ -35,7 +35,7 @@ impl Handler<EncodedUpdate> for WebsocketClient {
     type Result = ();
 
     fn handle(&mut self, msg: EncodedUpdate, ctx: &mut Self::Context) -> Self::Result {
-        ctx.text(msg.inner);
+        ctx.binary(msg.inner);
     }
 }
 

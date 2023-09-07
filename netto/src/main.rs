@@ -6,7 +6,7 @@ mod common;
 mod ksyms;
 mod actors;
 
-use std::net::IpAddr;
+use std::{net::IpAddr, path::PathBuf};
 
 use actix::{Actor, Addr};
 use actix_files::Files;
@@ -18,7 +18,7 @@ use clap::Parser;
 use libbpf_rs::num_possible_cpus;
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
 use tokio::sync::mpsc::channel;
-use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient};
+use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient, logger::Logger};
 
 #[derive(Parser)]
 #[command(name = "netto")]
@@ -40,7 +40,12 @@ struct Cli {
 
     /// User-space controller update period in ms
     #[arg(long, default_value_t = 500)]
-    user_frequency: u64
+    user_period: u64,
+
+    /// Path to a log file to which measurements are to be saved.
+    /// If logging is enabled by providing this argument, the web interface will be disabled.
+    #[arg(short, long)]
+    log_file: Option<PathBuf>
 }
 
 #[actix_web::get("/ws/")]
@@ -116,11 +121,17 @@ fn main() -> anyhow::Result<()> {
         let (error_catcher_sender, mut error_catcher_receiver) =
             channel::<anyhow::Error>(1);
 
-        let metrics_collector_actor_addr = MetricsCollector::new(num_possible_cpus)
+        let logger_addr = if let Some(path) = &cli.log_file {
+            Some(Logger::new(path, cli.user_period)?.start())
+        } else {
+            None
+        };
+
+        let metrics_collector_actor_addr = MetricsCollector::new(num_possible_cpus, logger_addr)
             .start();
         
         let _trace_analyzer_actor_addr = TraceAnalyzer::new(
-            cli.user_frequency,
+            cli.user_period,
             skel,
             num_possible_cpus,
             metrics_collector_actor_addr.clone(),
@@ -128,13 +139,20 @@ fn main() -> anyhow::Result<()> {
         )?.start();
 
         // Start HTTP server for frontend
-        let server_future = HttpServer::new(move || App::new()
-            .app_data(web::Data::new(metrics_collector_actor_addr.clone()))
-            .service(ws_get)
-            .service(Files::new("/", "www").index_file("index.html"))
-        )
-            .bind((cli.address, cli.port))?
-            .run();
+        let server_future = async move {
+            if cli.log_file.is_none() {
+                HttpServer::new(move || App::new()
+                    .app_data(web::Data::new(metrics_collector_actor_addr.clone()))
+                    .service(ws_get)
+                    .service(Files::new("/", "www").index_file("index.html"))
+                )
+                    .bind((cli.address, cli.port))?
+                    .run()
+                    .await
+            } else {
+                std::future::pending().await
+            }
+        };
 
         tokio::select! {
             ret = server_future => ret.map_err(|e| e.into()),

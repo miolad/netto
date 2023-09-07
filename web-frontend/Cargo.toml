@@ -18,8 +18,10 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Element",
     "Node",
-    "HtmlCollection"
+    "HtmlCollection",
+    "Blob"
 ]}
+gloo-file = "0.3"
 console_error_panic_hook = { version = "0.1", optional = true }
 metrics-common = { path = "../metrics-common" }
 plotters = "0.3"

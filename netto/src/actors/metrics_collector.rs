@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 use actix::{Addr, Actor, Context, Handler};
 use metrics_common::{Metric, MetricsWrapper};
-use super::{websocket_client::WebsocketClient, MetricUpdate, SubmitUpdate, EncodedUpdate, ClientConnected, ClientDisconnected};
+use super::{websocket_client::WebsocketClient, MetricUpdate, SubmitUpdate, EncodedUpdate, ClientConnected, ClientDisconnected, logger::Logger};
 
 pub struct MetricsCollector {
     metrics_root: Metric,
     clients: HashSet<Addr<WebsocketClient>>,
+    logger: Option<Addr<Logger>>,
     num_possible_cpus: usize
 }
 
@@ -45,7 +46,7 @@ impl Handler<SubmitUpdate> for MetricsCollector {
     type Result = ();
 
     fn handle(&mut self, msg: SubmitUpdate, _: &mut Self::Context) -> Self::Result {
-        let json = MetricsWrapper::to_json(
+        let mp = MetricsWrapper::to_mp(
             &self.metrics_root.sub_metrics,
             msg.net_power_w,
             msg.user_space_overhead,
@@ -54,7 +55,11 @@ impl Handler<SubmitUpdate> for MetricsCollector {
         );
 
         for addr in &self.clients {
-            addr.do_send(EncodedUpdate { inner: json.clone() });
+            addr.do_send(EncodedUpdate { inner: mp.clone() });
+        }
+
+        if let Some(logger) = &self.logger {
+            logger.do_send(EncodedUpdate { inner: mp });
         }
     }
 }
@@ -76,7 +81,7 @@ impl Handler<ClientDisconnected> for MetricsCollector {
 }
 
 impl MetricsCollector {
-    pub fn new(num_possible_cpus: usize) -> Self {
+    pub fn new(num_possible_cpus: usize, logger: Option<Addr<Logger>>) -> Self {
         Self {
             metrics_root: Metric {
                 name: "/".to_string(),
@@ -84,6 +89,7 @@ impl MetricsCollector {
                 sub_metrics: vec![]
             },
             clients: HashSet::new(),
+            logger,
             num_possible_cpus
         }
     }

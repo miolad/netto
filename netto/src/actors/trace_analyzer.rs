@@ -158,12 +158,12 @@ impl TraceAnalyzer {
             
             // Count symbols
             unsafe {
-                for trace_ptr in (0..num_traces as usize).map(|trace_idx| self.stack_traces_ptr.add((slot_off + trace_idx) * 128)) {
+                for trace_ptr in (0..num_traces as usize).map(|trace_idx| self.stack_traces_ptr.add((slot_off + trace_idx) * 128 /* size of a single trace */)) {
                     // Get the cpuid
                     let (trace_size, cpuid) = {
                         let v = trace_ptr.read_volatile();
 
-                        // Note that the trace size is encoded in bytes in the map, bu we care about number of u64s
+                        // Note that the trace size is encoded in bytes in the map, but we care about number of u64s
                         (v >> 35, v & 0xFFFFFFFF)
                     };
 

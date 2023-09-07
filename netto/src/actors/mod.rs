@@ -1,6 +1,7 @@
 pub mod trace_analyzer;
 pub mod metrics_collector;
 pub mod websocket_client;
+pub mod logger;
 
 use actix::{Message, Addr};
 use self::websocket_client::WebsocketClient;
@@ -52,10 +53,10 @@ struct SubmitUpdate {
     procfs_metrics: Vec<f64>
 }
 
-/// Wrapper around a JSON String to send to websocket clients.
-/// This struct exists solely because String can't implement Message.
+/// Wrapper around a MessagePack buffer to send to websocket clients.
+/// This struct exists solely because Vec<u8> can't implement Message.
 #[derive(Message)]
 #[rtype("()")]
 struct EncodedUpdate {
-    inner: String
+    inner: Vec<u8>
 }
