@@ -7,18 +7,16 @@ mod ksyms;
 mod actors;
 
 use std::{net::IpAddr, path::PathBuf};
-
-use actix::{Actor, Addr};
+use actix::Actor;
 use actix_files::Files;
-use actix_web::{HttpServer, App, rt::System, HttpRequest, web, HttpResponse};
-use actix_web_actors::ws;
+use actix_web::{HttpServer, App, rt::System, web};
 use actors::trace_analyzer::TraceAnalyzer;
 use anyhow::anyhow;
 use clap::Parser;
 use libbpf_rs::num_possible_cpus;
 use perf_event_open_sys::{bindings::{perf_event_attr, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK}, perf_event_open};
-use tokio::sync::mpsc::channel;
-use crate::actors::{metrics_collector::MetricsCollector, websocket_client::WebsocketClient, logger::Logger};
+use tokio::sync::{mpsc::channel, watch};
+use crate::actors::{metrics_collector::MetricsCollector, websocket_client::ws_get, file_logger::FileLogger, prometheus_logger::{PrometheusLogger, prometheus_log_get}};
 
 #[derive(Parser)]
 #[command(name = "netto")]
@@ -43,18 +41,14 @@ struct Cli {
     user_period: u64,
 
     /// Path to a log file to which measurements are to be saved.
-    /// If logging is enabled by providing this argument, the web interface will be disabled.
+    /// If logging is enabled by providing this argument, any other form of web interface will be disabled.
     #[arg(short, long)]
-    log_file: Option<PathBuf>
-}
+    log_file: Option<PathBuf>,
 
-#[actix_web::get("/ws/")]
-async fn ws_get(
-    req: HttpRequest,
-    stream: web::Payload,
-    collector: web::Data<Addr<MetricsCollector>>
-) -> Result<HttpResponse, actix_web::Error> {
-    ws::start(WebsocketClient::new(collector.get_ref().clone()), &req, stream)
+    /// Enable Prometheus logging in place of the web interface.
+    /// The Prometheus-compatible endpoint will be available at `http://address:port`
+    #[arg(short = 'P', long, default_value_t = false)]
+    prometheus: bool
 }
 
 fn main() -> anyhow::Result<()> {
@@ -131,14 +125,23 @@ fn main() -> anyhow::Result<()> {
         let (error_catcher_sender, mut error_catcher_receiver) =
             channel::<anyhow::Error>(1);
 
-        let logger_addr = if let Some(path) = &cli.log_file {
-            Some(Logger::new(path, cli.user_period)?.start())
+        let file_logger_addr = if let Some(path) = &cli.log_file {
+            Some(FileLogger::new(path, cli.user_period)?.start())
+        } else {
+            None
+        };
+        let prometheus_logger_addr = if cli.prometheus {
+            let (sender, receiver) = watch::channel(String::new());
+            Some((receiver, PrometheusLogger::new(sender)?.start()))
         } else {
             None
         };
 
-        let metrics_collector_actor_addr = MetricsCollector::new(num_possible_cpus, logger_addr)
-            .start();
+        let metrics_collector_actor_addr = MetricsCollector::new(
+            num_possible_cpus,
+            file_logger_addr,
+            prometheus_logger_addr.as_ref().map(|(_, l)| l.to_owned())
+        ).start();
         
         let _trace_analyzer_actor_addr = TraceAnalyzer::new(
             cli.user_period,
@@ -152,11 +155,20 @@ fn main() -> anyhow::Result<()> {
         // Start HTTP server for frontend
         let server_future = async move {
             if cli.log_file.is_none() {
-                HttpServer::new(move || App::new()
-                    .app_data(web::Data::new(metrics_collector_actor_addr.clone()))
-                    .service(ws_get)
-                    .service(Files::new("/", "www").index_file("index.html"))
-                )
+                HttpServer::new(move || {
+                    let app = App::new();
+                    
+                    if let Some((receiver, _)) = &prometheus_logger_addr {
+                        app
+                            .app_data(web::Data::new(receiver.clone()))
+                            .service(prometheus_log_get)
+                    } else {
+                        app
+                            .app_data(web::Data::new(metrics_collector_actor_addr.clone()))
+                            .service(ws_get)
+                            .service(Files::new("/", "www").index_file("index.html"))
+                    }
+                })
                     .bind((cli.address, cli.port))?
                     .run()
                     .await

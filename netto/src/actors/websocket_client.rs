@@ -1,6 +1,16 @@
 use actix::{Actor, Handler, Addr, StreamHandler, AsyncContext};
+use actix_web::{HttpRequest, web, HttpResponse};
 use actix_web_actors::ws::{WebsocketContext, self};
 use super::{EncodedUpdate, metrics_collector::MetricsCollector, ClientConnected, ClientDisconnected};
+
+#[actix_web::get("/ws/")]
+async fn ws_get(
+    req: HttpRequest,
+    stream: web::Payload,
+    collector: web::Data<Addr<MetricsCollector>>
+) -> Result<HttpResponse, actix_web::Error> {
+    ws::start(WebsocketClient::new(collector.get_ref().clone()), &req, stream)
+}
 
 pub struct WebsocketClient {
     /// Addr of the `MetricsCollector` actor

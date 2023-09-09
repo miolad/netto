@@ -1,7 +1,8 @@
 pub mod trace_analyzer;
 pub mod metrics_collector;
 pub mod websocket_client;
-pub mod logger;
+pub mod file_logger;
+pub mod prometheus_logger;
 
 use actix::{Message, Addr};
 use self::websocket_client::WebsocketClient;
@@ -38,7 +39,7 @@ struct MetricUpdate {
 
 /// Used to trigger the `MetricsCollector` to submit the update
 /// to all the clients.
-#[derive(Message)]
+#[derive(Message, Clone)]
 #[rtype("()")]
 struct SubmitUpdate {
     /// Power drawn by the CPU in the networking stack

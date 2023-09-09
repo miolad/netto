@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use actix::{Addr, Actor, Context, Handler};
 use metrics_common::{Metric, MetricsWrapper};
-use super::{websocket_client::WebsocketClient, MetricUpdate, SubmitUpdate, EncodedUpdate, ClientConnected, ClientDisconnected, logger::Logger};
+use super::{websocket_client::WebsocketClient, MetricUpdate, SubmitUpdate, EncodedUpdate, ClientConnected, ClientDisconnected, file_logger::FileLogger, prometheus_logger::PrometheusLogger};
 
 pub struct MetricsCollector {
     metrics_root: Metric,
     clients: HashSet<Addr<WebsocketClient>>,
-    logger: Option<Addr<Logger>>,
+    file_logger: Option<Addr<FileLogger>>,
+    prometheus_logger: Option<Addr<PrometheusLogger>>,
     num_possible_cpus: usize
 }
 
@@ -39,6 +40,11 @@ impl Handler<MetricUpdate> for MetricsCollector {
 
         target.cpu_fracs.resize(self.num_possible_cpus, 0.0);
         target.cpu_fracs[msg.cpuid] = msg.cpu_frac;
+
+        // Relay msg to prometheus logger
+        if let Some(l) = &self.prometheus_logger {
+            l.do_send(msg);
+        }
     }
 }
 
@@ -46,20 +52,27 @@ impl Handler<SubmitUpdate> for MetricsCollector {
     type Result = ();
 
     fn handle(&mut self, msg: SubmitUpdate, _: &mut Self::Context) -> Self::Result {
-        let mp = MetricsWrapper::to_mp(
-            &self.metrics_root.sub_metrics,
-            msg.net_power_w,
-            msg.user_space_overhead,
-            self.num_possible_cpus,
-            msg.procfs_metrics
-        );
-
-        for addr in &self.clients {
-            addr.do_send(EncodedUpdate { inner: mp.clone() });
+        // Relay msg to prometheus logger
+        if let Some(l) = &self.prometheus_logger {
+            l.do_send(msg.clone());
         }
+        
+        if !self.clients.is_empty() || self.file_logger.is_some() {
+            let mp = MetricsWrapper::to_mp(
+                &self.metrics_root.sub_metrics,
+                msg.net_power_w,
+                msg.user_space_overhead,
+                self.num_possible_cpus,
+                msg.procfs_metrics
+            );
 
-        if let Some(logger) = &self.logger {
-            logger.do_send(EncodedUpdate { inner: mp });
+            for addr in &self.clients {
+                addr.do_send(EncodedUpdate { inner: mp.clone() });
+            }
+
+            if let Some(logger) = &self.file_logger {
+                logger.do_send(EncodedUpdate { inner: mp });
+            }
         }
     }
 }
@@ -81,7 +94,11 @@ impl Handler<ClientDisconnected> for MetricsCollector {
 }
 
 impl MetricsCollector {
-    pub fn new(num_possible_cpus: usize, logger: Option<Addr<Logger>>) -> Self {
+    pub fn new(
+        num_possible_cpus: usize,
+        file_logger: Option<Addr<FileLogger>>,
+        prometheus_logger: Option<Addr<PrometheusLogger>>
+    ) -> Self {
         Self {
             metrics_root: Metric {
                 name: "/".to_string(),
@@ -89,7 +106,8 @@ impl MetricsCollector {
                 sub_metrics: vec![]
             },
             clients: HashSet::new(),
-            logger,
+            file_logger,
+            prometheus_logger,
             num_possible_cpus
         }
     }
