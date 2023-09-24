@@ -106,14 +106,16 @@ SEC("fexit/sock_sendmsg")
 int BPF_PROG(sock_sendmsg_exit) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, now = bpf_ktime_get_ns(), t;
+    u64* per_task_events, now, entry_ts, t;
 
     if (
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
-        t = now - per_cpu_data->entry_ts;
-        
+        entry_ts = per_cpu_data->entry_ts;
+        now = bpf_ktime_get_ns();
+        t = now - entry_ts;
+
         *per_task_events = EVENT_MAX;
         per_cpu_data->per_event_total_time[EVENT_SOCK_SENDMSG] += t;
         per_cpu_data->sched_switch_accounted_time += t;
@@ -143,14 +145,16 @@ SEC("fexit/sock_recvmsg")
 int BPF_PROG(sock_recvmsg_exit) {
     u32 zero = 0;
     struct per_cpu_data* per_cpu_data;
-    u64* per_task_events, now = bpf_ktime_get_ns(), t;
+    u64* per_task_events, now, entry_ts, t;
 
     if (
         likely((per_task_events = bpf_task_storage_get(&traced_pids, bpf_get_current_task_btf(), NULL, 0)) != NULL) &&
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL)
     ) {
-        t = now - per_cpu_data->entry_ts;
-        
+        entry_ts = per_cpu_data->entry_ts;
+        now = bpf_ktime_get_ns();
+        t = now - entry_ts;
+
         *per_task_events = EVENT_MAX;
         per_cpu_data->per_event_total_time[EVENT_SOCK_RECVMSG] += t;
         per_cpu_data->sched_switch_accounted_time += t;
