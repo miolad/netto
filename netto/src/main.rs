@@ -6,7 +6,7 @@ mod common;
 mod ksyms;
 mod actors;
 
-use std::{net::IpAddr, path::PathBuf};
+use std::path::PathBuf;
 use actix::Actor;
 use actix_files::Files;
 use actix_web::{HttpServer, App, rt::System, web};
@@ -28,9 +28,9 @@ struct Cli {
     #[arg(short, long, default_value_t = 1000)]
     frequency: u64,
 
-    /// Bind address for the web frontend
+    /// Bind address or hostname for the web frontend
     #[arg(short, long, default_value = "0.0.0.0")]
-    address: IpAddr,
+    address: String,
 
     /// Bind port for the web frontend
     #[arg(short, long, default_value_t = 8080)]
@@ -71,9 +71,13 @@ fn main() -> anyhow::Result<()> {
         let mut skel = open_skel.load()?;
 
         // Explicitly attach entry programs last (because the task-local storage can only be allocated by them)
+        #[cfg(not(feature = "save-traces"))]
         let _sched_switch_link = skel.progs_mut().tp_sched_switch().attach()?;
+        #[cfg(not(feature = "save-traces"))]
         let _sock_sendmsg_exit_link = skel.progs_mut().sock_sendmsg_exit().attach()?;
+        #[cfg(not(feature = "save-traces"))]
         let _sock_recvmsg_exit_link = skel.progs_mut().sock_recvmsg_exit().attach()?;
+        #[cfg(not(feature = "save-traces"))]
         let _net_rx_softirq_exit_link = skel.progs_mut().net_rx_softirq_exit().attach()?;
 
         // Open and attach a perf-event program for each CPU
@@ -117,8 +121,11 @@ fn main() -> anyhow::Result<()> {
             v
         };
         
+        #[cfg(not(feature = "save-traces"))]
         let _sock_sendmsg_entry_link = skel.progs_mut().sock_sendmsg_entry().attach()?;
+        #[cfg(not(feature = "save-traces"))]
         let _sock_recvmsg_entry_link = skel.progs_mut().sock_recvmsg_entry().attach()?;
+        #[cfg(not(feature = "save-traces"))]
         let _net_rx_softirq_entry_link = skel.progs_mut().net_rx_softirq_entry().attach()?;
 
         // Init actors

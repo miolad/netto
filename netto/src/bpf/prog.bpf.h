@@ -26,8 +26,8 @@ struct per_cpu_data {
     /// @brief Total time in ns registered for each event
     u64 per_event_total_time[EVENT_MAX];
 
-    /// @brief When non-zero, stack traces by the perf event prog are enabled
-    u8 enable_stack_trace;
+    /// @brief When non-zero, stack traces by the perf event prog are disabled
+    u8 disable_stack_trace;
 };
 
 #endif

@@ -14,7 +14,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 /**
  * Keeps track of which tasks are currently being tracked,
- * by associating an event identified to each task.
+ * by associating an event identifier to each of them.
  */
 struct {
     __uint(type, BPF_MAP_TYPE_TASK_STORAGE);
@@ -176,7 +176,7 @@ int BPF_PROG(net_rx_softirq_entry, unsigned int vec) {
     ) {
         stop_event(*per_task_events, per_cpu_data, now);
         per_cpu_data->entry_ts = now;
-        if (vec == NET_RX_SOFTIRQ) per_cpu_data->enable_stack_trace = 1;
+        if (vec == NET_RX_SOFTIRQ) per_cpu_data->disable_stack_trace = 0;
     }
 
     return 0;
@@ -204,7 +204,7 @@ int BPF_PROG(net_rx_softirq_exit, unsigned int vec) {
         default:
         case NET_RX_SOFTIRQ:
             per_cpu_data->per_event_total_time[EVENT_NET_RX_SOFTIRQ] += t;
-            per_cpu_data->enable_stack_trace = 0;
+            per_cpu_data->disable_stack_trace = 1;
         }
 
         per_cpu_data->sched_switch_accounted_time += t;
@@ -245,7 +245,7 @@ int perf_event_prog(struct bpf_perf_event_data* ctx) {
     
     if (
         likely((per_cpu_data = bpf_map_lookup_elem(&per_cpu, &zero)) != NULL) &&
-        per_cpu_data->enable_stack_trace
+        !per_cpu_data->disable_stack_trace
     ) {
         index = __sync_fetch_and_add(
             stack_traces_slot_off ? &stack_traces_count_slot_1 : &stack_traces_count_slot_0,

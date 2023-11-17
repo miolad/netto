@@ -1,0 +1,863 @@
+{
+    "__inputs": [
+      {
+        "name": "DS_MIMIR",
+        "label": "Mimir",
+        "description": "",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "pluginName": "Prometheus"
+      },
+      {
+        "name": "DS_EXPRESSION",
+        "label": "Expression",
+        "description": "",
+        "type": "datasource",
+        "pluginId": "__expr__"
+      }
+    ],
+    "__elements": {},
+    "__requires": [
+      {
+        "type": "datasource",
+        "id": "__expr__",
+        "version": "1.0.0"
+      },
+      {
+        "type": "panel",
+        "id": "gauge",
+        "name": "Gauge",
+        "version": ""
+      },
+      {
+        "type": "grafana",
+        "id": "grafana",
+        "name": "Grafana",
+        "version": "10.2.1"
+      },
+      {
+        "type": "datasource",
+        "id": "prometheus",
+        "name": "Prometheus",
+        "version": "1.0.0"
+      },
+      {
+        "type": "panel",
+        "id": "timeseries",
+        "name": "Time series",
+        "version": ""
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": null,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_MIMIR}"
+        },
+        "description": "Fraction of the host's total power draw attributable to networking",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "max": 60,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "watt"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 5,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "minVizHeight": 75,
+          "minVizWidth": 75,
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "showThresholdLabels": false,
+          "showThresholdMarkers": false
+        },
+        "pluginVersion": "10.2.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "net_power{job=\"$host\"}",
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Networking power draw",
+        "type": "gauge"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_MIMIR}"
+        },
+        "description": "Overall CPU utilization (user+system)",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "CPU utilization",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 100,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 3,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "displayName": "CPU utilization",
+            "mappings": [],
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "percent"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 19,
+          "x": 5,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "100*procfs_metric{job=\"$host\",index=\"3\"}",
+            "hide": true,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "count(count(rx_softirq{job=\"$host\"}) by (cpu))",
+            "hide": true,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "__expr__",
+              "uid": "${DS_EXPRESSION}"
+            },
+            "expression": "100-$A/$B",
+            "hide": false,
+            "refId": "C",
+            "type": "math"
+          }
+        ],
+        "title": "Total CPU utilization",
+        "transformations": [],
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_MIMIR}"
+        },
+        "description": "Fraction of CPU used by the networking stack",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "CPU utilization",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 100,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 3,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "displayName": "CPU consumption",
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "NET_RX_SOFTIRQ"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "NET_RX_SOFTIRQ"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "NET_TX_SOFTIRQ"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "NET_TX_SOFTIRQ"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "RX syscalls"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "RX syscalls"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "TX syscalls"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "TX syscalls"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "id": 2,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "exemplar": false,
+            "expr": "100*sum(tx_syscalls{job=\"$host\"})/count(count(tx_syscalls{job=\"$host\"}) by (cpu))",
+            "format": "time_series",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "TX syscalls"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "100*sum(rx_syscalls{job=\"$host\"})/count(count(rx_syscalls{job=\"$host\"}) by (cpu))",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "RX syscalls"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "100*sum(tx_softirq{job=\"$host\"})/count(count(tx_softirq{job=\"$host\"}) by (cpu))",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "NET_TX_SOFTIRQ"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "100*sum(rx_softirq{job=\"$host\"})/count(count(rx_softirq{job=\"$host\"}) by (cpu))",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "NET_RX_SOFTIRQ"
+          }
+        ],
+        "title": "Networking CPU utilization",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_MIMIR}"
+        },
+        "description": "Breakdown of the NET_RX_SOFTIRQ into its basic components",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Relative CPU utilization",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 100,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "stepBefore",
+              "lineStyle": {
+                "fill": "solid"
+              },
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "percent"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "Driver_poll"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Driver Poll"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "GRO_overhead"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "GRO Overhead"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "XDP_generic"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "XDP Generic"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "TC_classify"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "TC Classify"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "NF_ingress"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "NF Ingress"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "NF_conntrack"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "NF Conntrack"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "Bridging"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Bridging"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "NF_prerouting"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "NF Prerouting"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "Forwarding"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Forwarding"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "Local_delivery"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Local Delivery"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "Other"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#b7b7b7",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 18
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq{job=\"$host\"})",
+            "hide": true,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "Total_softirq"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__driver_poll{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "Driver_poll"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__gro_overhead{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "GRO_overhead"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__xdp_generic{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "XDP_generic"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__tc_classify{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "TC_classify"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__nf_ingress{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "NF_ingress"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__nf_conntrack{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "NF_conntrack"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__bridging{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "Bridging"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__nf_prerouting__v4{job=\"$host\"}) + sum(rx_softirq__nf_prerouting__v6{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "NF_prerouting"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__forwarding__v4{job=\"$host\"}) + sum(rx_softirq__forwarding__v6{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "Forwarding"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_MIMIR}"
+            },
+            "editorMode": "code",
+            "expr": "sum(rx_softirq__local_delivery__v4{job=\"$host\"}) + sum(rx_softirq__local_delivery__v6{job=\"$host\"})",
+            "hide": false,
+            "instant": false,
+            "legendFormat": "__auto",
+            "range": true,
+            "refId": "Local_delivery"
+          },
+          {
+            "datasource": {
+              "type": "__expr__",
+              "uid": "${DS_EXPRESSION}"
+            },
+            "expression": "$Total_softirq - ($Driver_poll + $GRO_overhead + $XDP_generic + $TC_classify + $NF_ingress + $NF_conntrack + $Bridging + $NF_prerouting + $Forwarding + $Local_delivery)",
+            "hide": false,
+            "refId": "Other",
+            "type": "math"
+          }
+        ],
+        "title": "NET_RX_SOFTIRQ breakdown",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 38,
+    "tags": [],
+    "templating": {
+      "list": [
+        {
+          "current": {},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_MIMIR}"
+          },
+          "definition": "label_values(job)",
+          "description": "Host to display statistics of",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Host",
+          "multi": false,
+          "name": "host",
+          "options": [],
+          "query": {
+            "query": "label_values(job)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 0,
+          "type": "query"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-5m",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "netto",
+    "uid": "ee0df540-1159-4720-9575-00a8f83417b9",
+    "version": 9,
+    "weekStart": ""
+  }
+  

@@ -62,7 +62,7 @@ pub struct TraceAnalyzer {
     prev_total_energy: u64,
 
     #[cfg(feature = "save-traces")]
-    traces_output_file: File
+    traces_output_buf: Vec<u8>
 }
 
 impl TraceAnalyzer {
@@ -116,7 +116,7 @@ impl TraceAnalyzer {
             prev_total_times: vec![vec![0;  event_types_EVENT_MAX as _]; num_possible_cpus],
             prev_total_energy: 0,
             #[cfg(feature = "save-traces")]
-            traces_output_file: File::create("traces")?
+            traces_output_buf: vec![]
         })
     }
 
@@ -160,7 +160,7 @@ impl TraceAnalyzer {
 
             // Make sure to read the count *after* swapping the slots
             let num_traces = *num_traces_ref;
-            
+
             // Count symbols
             unsafe {
                 for trace_ptr in (0..num_traces as usize).map(|trace_idx| self.stack_traces_ptr.add((slot_off + trace_idx) * 128 /* size of a single trace */)) {
@@ -177,7 +177,7 @@ impl TraceAnalyzer {
                         trace_ptr.add(1),
                         trace_size as _,
                         #[cfg(feature = "save-traces")]
-                        &mut self.traces_output_file
+                        &mut self.traces_output_buf
                     );
                 }
             }
@@ -362,5 +362,12 @@ impl Actor for TraceAnalyzer {
                 act.error_catcher_sender.blocking_send(e).unwrap();
             }
         });
+    }
+
+    #[cfg(feature = "save-traces")]
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
+        use std::io::Write;
+        let mut traces_file = File::create("traces").unwrap();
+        traces_file.write_all(&self.traces_output_buf).unwrap();
     }
 }
