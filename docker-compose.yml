@@ -1,0 +1,46 @@
+services:
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana_dashboard.json:/etc/grafana/dashboards/netto/netto.json
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    configs:
+      - source: grafana-datasource-provisioning
+        target: /etc/grafana/provisioning/datasources/pyroscope.yaml
+      - source: grafana-dashboard-provisioning
+        target: /etc/grafana/provisioning/dashboards/netto.yaml
+  pyroscope:
+    image: grafana/pyroscope
+    container_name: pyroscope
+    restart: unless-stopped
+  netto:
+    build: .
+    container_name: netto
+    restart: unless-stopped
+    privileged: true
+
+configs:
+  grafana-datasource-provisioning:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Pyroscope
+          type: phlare
+          url: http://pyroscope:4040
+          access: proxy
+  grafana-dashboard-provisioning:
+    content: |
+      apiVersion: 1
+      providers:
+        - name: Netto
+          type: file
+          updateInterval: 5s
+          options:
+            path: /etc/grafana/dashboards/netto
