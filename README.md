@@ -36,42 +36,25 @@ Compile and run with:
     eBPF-based network diagnosis tool for Linux
 
     Usage: netto [OPTIONS]
-    
+
     Options:
-      -f, --frequency <FREQUENCY>      Perf-event's sampling frequency in Hz for the NET_RX_SOFTIRQ cost breakdown     [default: 1000]
-      -a, --address <ADDRESS>          Bind address for the web frontend [default: 0.0.0.0]
-      -p, --port <PORT>                Bind port for the web frontend [default: 8080]
+      -f, --frequency <FREQUENCY>      Perf-event's sampling frequency in Hz for the NET_RX_SOFTIRQ cost breakdown [default: 1000]
+      -a, --address <ADDRESS>          Address of the Grafana Pyroscope backend [default: pyroscope]
+      -p, --port <PORT>                Port for the Grafana Pyroscope backend to listen on [default: 4040]
           --user-period <USER_PERIOD>  User-space controller update period in ms [default: 500]
-      -l, --log-file <LOG_FILE>        Path to a log file to which measurements are to be saved. If logging is enabled by providing this argument, any other form of web interface will be disabled
-      -P, --prometheus                 Enable Prometheus logging in place of the web interface. The Prometheus-compatible endpoint will be available at `http://address:port`
+      -l, --log-file <LOG_FILE>        Path to a log file to which measurements are to be saved. If logging is enabled by providing this   argument, any other form of web interface will be disabled
+      -P, --prometheus                 Enable Prometheus logging in place of the web interface. The Prometheus-compatible endpoint will   be available at `http://address:port`
+      -u, --user-pids <USER_PIDS>      List of PIDs of which to track the user-space CPU time via procfs
       -h, --help                       Print help
       -V, --version                    Print version
 
 ## Deployment
 
-By default, Netto exposes the real time results as a Wasm-powered web page accessible on `http://address:port`. This interface is ideal for consuming the content as it is produced, but does not provide out-of-the-box support for storing the extracted metrics for delayed access.
-When real time monitoring of the host is not the primary concern, and to better integrate with existing metrics collection stacks (such as in data center environments), it is recommended to instead replace the built-in custom web frontend with a Prometheus-based exporter with the `-P` (or `--prometheus`) command line option.
+Netto exposes the real time results to a Grafana Pyroscope endpoint (`http://pyroscope:4040` by default, configurable through the `-a` and `-p` CLI arguments). Pyroscope allows for unfiltered, direct access to the raw flamegraph-like data generation that is provided by Netto.
 
-In most cases the recommended way to run Netto involves a command similar to:
+The recommended way to run Netto is demonstrated in the provided `docker-compose.yml` file: it will deploy the a privileged Netto container alongside both the Pyroscope and Grafana server. Additionally, a sample Grafana dashboard is provisioned.
 
-    docker run --name netto --privileged --restart unless-stopped -d -p 8080:8080 netto -P
-
-Or with the equivalent `docker compose` configuration entry:
-
-    services:
-        netto:
-            build: https://github.com/miolad/netto.git#perf-event-mmapable-array
-            image: netto
-            container_name: netto
-            privileged: true
-            command: -P
-            restart: unless-stopped
-        ...
-
-## Integration with Grafana
-
-With the `-P` option selected, Netto can be targeted by the Prometheus scraper and referenced in Grafana directly.
-An example dashboard that showcases the major metrics collected by Netto is available as `grafana_dashboard.json` (which assumes that the variable "host" is used to differentiate between different monitored hosts through the Prometheus "job" label, to be configured in Prometheus' settings).
+After starting the deployment (`docker compose up -d`), the Grafana service can be accessed at `http://localhost:3000`.
 
 ## Repository structure
 
